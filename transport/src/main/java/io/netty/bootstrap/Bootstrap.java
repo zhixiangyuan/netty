@@ -251,7 +251,22 @@ public class Bootstrap extends AbstractBootstrap<Bootstrap, Channel> {
                 if (localAddress == null) {
                     channel.connect(remoteAddress, connectPromise);
                 } else {
-                    channel.connect(remoteAddress, localAddress, connectPromise);
+                    final SocketAddress local;
+                    if (localAddress instanceof DynamicLocalSocketAddress) {
+                        try {
+                            local = ((DynamicLocalSocketAddress) localAddress).address(remoteAddress);
+                        } catch (Throwable cause) {
+                            connectPromise.setFailure(cause);
+                            return;
+                        }
+                    } else {
+                        local = localAddress;
+                    }
+                    if (local == null) {
+                        channel.connect(remoteAddress, connectPromise);
+                    } else {
+                        channel.connect(remoteAddress, local, connectPromise);
+                    }
                 }
                 connectPromise.addListener(ChannelFutureListener.CLOSE_ON_FAILURE);
             }
