@@ -333,6 +333,55 @@ public class BootstrapTest {
         }
     }
 
+    @Test
+    public void testDynamicLocalSocketAddressSuccess() throws Exception {
+        final Bootstrap bootstrapA = new Bootstrap();
+        bootstrapA.group(groupA);
+        bootstrapA.channel(LocalChannel.class);
+        bootstrapA.resolver(new TestAddressResolverGroup(true));
+        bootstrapA.handler(dummyHandler);
+
+        final ServerBootstrap bootstrapB = new ServerBootstrap();
+        bootstrapB.group(groupB);
+        bootstrapB.channel(LocalServerChannel.class);
+        bootstrapB.childHandler(dummyHandler);
+        final SocketAddress localAddress = bootstrapB.bind(LocalAddress.ANY).sync().channel().localAddress();
+        final LocalAddress local = new LocalAddress("local");
+        Channel channel = bootstrapA.connect(localAddress, new DynamicLocalSocketAddress() {
+            @Override
+            public SocketAddress address(SocketAddress remote) {
+                assertEquals(localAddress, remote);
+                return local;
+            }
+        }).sync().channel();
+        assertEquals(local, channel.localAddress());
+        channel.close().syncUninterruptibly();
+    }
+
+    @Test
+    public void testDynamicLocalSocketAddressFail() throws Exception {
+        final Bootstrap bootstrapA = new Bootstrap();
+        bootstrapA.group(groupA);
+        bootstrapA.channel(LocalChannel.class);
+        bootstrapA.resolver(new TestAddressResolverGroup(true));
+        bootstrapA.handler(dummyHandler);
+
+        final ServerBootstrap bootstrapB = new ServerBootstrap();
+        bootstrapB.group(groupB);
+        bootstrapB.channel(LocalServerChannel.class);
+        bootstrapB.childHandler(dummyHandler);
+        final SocketAddress localAddress = bootstrapB.bind(LocalAddress.ANY).sync().channel().localAddress();
+        final IllegalArgumentException error = new IllegalArgumentException();
+        Throwable cause = bootstrapA.connect(localAddress, new DynamicLocalSocketAddress() {
+            @Override
+            public SocketAddress address(SocketAddress remote) {
+                assertEquals(localAddress, remote);
+                throw error;
+            }
+        }).await().cause();
+        assertSame(error, cause);
+    }
+
     @Sharable
     private static final class DummyHandler extends ChannelInboundHandlerAdapter { }
 
