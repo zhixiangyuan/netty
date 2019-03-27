@@ -58,7 +58,6 @@ public final class OpenSsl {
     private static final Set<String> AVAILABLE_OPENSSL_CIPHER_SUITES;
     private static final Set<String> AVAILABLE_JAVA_CIPHER_SUITES;
     private static final boolean SUPPORTS_KEYMANAGER_FACTORY;
-    private static final boolean SUPPORTS_HOSTNAME_VALIDATION;
     private static final boolean USE_KEYMANAGER_FACTORY;
     private static final boolean SUPPORTS_OCSP;
     private static final boolean TLSV13_SUPPORTED;
@@ -134,7 +133,6 @@ public final class OpenSsl {
             final Set<String> availableOpenSslCipherSuites = new LinkedHashSet<String>(128);
             boolean supportsKeyManagerFactory = false;
             boolean useKeyManagerFactory = false;
-            boolean supportsHostNameValidation = false;
             boolean tlsv13Supported = false;
 
             IS_BORINGSSL = "BoringSSL".equals(versionString());
@@ -187,12 +185,6 @@ public final class OpenSsl {
                                                "AEAD-AES128-GCM-SHA256",
                                                "AEAD-AES256-GCM-SHA384",
                                                "AEAD-CHACHA20-POLY1305-SHA256");
-                        }
-                        try {
-                            SSL.setHostNameValidation(ssl, 0, "netty.io");
-                            supportsHostNameValidation = true;
-                        } catch (Throwable ignore) {
-                            logger.debug("Hostname Verification not supported.");
                         }
                         try {
                             X509Certificate certificate = selfSignedCertificate();
@@ -254,7 +246,6 @@ public final class OpenSsl {
 
             AVAILABLE_CIPHER_SUITES = availableCipherSuites;
             SUPPORTS_KEYMANAGER_FACTORY = supportsKeyManagerFactory;
-            SUPPORTS_HOSTNAME_VALIDATION = supportsHostNameValidation;
             USE_KEYMANAGER_FACTORY = useKeyManagerFactory;
 
             Set<String> protocols = new LinkedHashSet<String>(6);
@@ -297,7 +288,6 @@ public final class OpenSsl {
             AVAILABLE_JAVA_CIPHER_SUITES = Collections.emptySet();
             AVAILABLE_CIPHER_SUITES = Collections.emptySet();
             SUPPORTS_KEYMANAGER_FACTORY = false;
-            SUPPORTS_HOSTNAME_VALIDATION = false;
             USE_KEYMANAGER_FACTORY = false;
             SUPPORTED_PROTOCOLS_SET = Collections.emptySet();
             SUPPORTS_OCSP = false;
@@ -488,11 +478,14 @@ public final class OpenSsl {
     }
 
     /**
-     * Returns {@code true} if <a href="https://wiki.openssl.org/index.php/Hostname_validation">Hostname Validation</a>
-     * is supported when using OpenSSL.
+     * Returns always {@code true}.
+     *
+     * @deprecated will be removed as hostname validation is always supported as it is done as part of the
+     * {@link javax.net.ssl.TrustManager} implementation.
      */
+    @Deprecated
     public static boolean supportsHostnameValidation() {
-        return SUPPORTS_HOSTNAME_VALIDATION;
+        return isAvailable();
     }
 
     static boolean useKeyManagerFactory() {
