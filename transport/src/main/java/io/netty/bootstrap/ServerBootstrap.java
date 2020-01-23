@@ -47,7 +47,9 @@ public class ServerBootstrap extends AbstractBootstrap<ServerBootstrap, ServerCh
     private final Map<ChannelOption<?>, Object> childOptions = new LinkedHashMap<ChannelOption<?>, Object>();
     private final Map<AttributeKey<?>, Object> childAttrs = new LinkedHashMap<AttributeKey<?>, Object>();
     private final ServerBootstrapConfig config = new ServerBootstrapConfig(this);
+    /** 这个 group 便是服务端实际处理 io 读写的 group */
     private volatile EventLoopGroup childGroup;
+    /** 用户自定义的处理器注册逻辑便在其中，一般是实现 ChannelInitializer 的 initChannel 方法 */
     private volatile ChannelHandler childHandler;
 
     public ServerBootstrap() { }
@@ -139,13 +141,17 @@ public class ServerBootstrap extends AbstractBootstrap<ServerBootstrap, ServerCh
 
     @Override
     void init(Channel channel) throws Exception {
+        // 获取用户设置的 options
         final Map<ChannelOption<?>, Object> options = options0();
         synchronized (options) {
+            // 将用户设置的 option 绑定到 channel 上面
             setChannelOptions(channel, options, logger);
         }
 
+        // 获取用户设置的属性
         final Map<AttributeKey<?>, Object> attrs = attrs0();
         synchronized (attrs) {
+            // 将用户设置的属性设置到 channel 上面
             for (Entry<AttributeKey<?>, Object> e: attrs.entrySet()) {
                 @SuppressWarnings("unchecked")
                 AttributeKey<Object> key = (AttributeKey<Object>) e.getKey();
@@ -160,9 +166,11 @@ public class ServerBootstrap extends AbstractBootstrap<ServerBootstrap, ServerCh
         final Entry<ChannelOption<?>, Object>[] currentChildOptions;
         final Entry<AttributeKey<?>, Object>[] currentChildAttrs;
         synchronized (childOptions) {
+            // 获取用户设置的 childOptions
             currentChildOptions = childOptions.entrySet().toArray(newOptionArray(0));
         }
         synchronized (childAttrs) {
+            // 获取用户设置的 childAttrs
             currentChildAttrs = childAttrs.entrySet().toArray(newAttrArray(0));
         }
 
@@ -170,8 +178,10 @@ public class ServerBootstrap extends AbstractBootstrap<ServerBootstrap, ServerCh
             @Override
             public void initChannel(final Channel ch) throws Exception {
                 final ChannelPipeline pipeline = ch.pipeline();
+                // 获取用户指定的 handler
                 ChannelHandler handler = config.handler();
                 if (handler != null) {
+                    // 将其添加进入 pipeline
                     pipeline.addLast(handler);
                 }
 

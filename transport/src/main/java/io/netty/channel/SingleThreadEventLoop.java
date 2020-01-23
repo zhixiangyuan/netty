@@ -32,9 +32,22 @@ import java.util.concurrent.ThreadFactory;
  */
 public abstract class SingleThreadEventLoop extends SingleThreadEventExecutor implements EventLoop {
 
+    /** 默认任务队列最大数量 */
     protected static final int DEFAULT_MAX_PENDING_TASKS = Math.max(16,
             SystemPropertyUtil.getInt("io.netty.eventLoop.maxPendingTasks", Integer.MAX_VALUE));
 
+    /**
+     * 尾部任务队列，执行在 {@link #taskQueue} 之后
+     *
+     * Commits
+     *  * [Ability to run a task at the end of an eventloop iteration.](https://github.com/netty/netty/pull/5513)
+     *
+     * Issues
+     *  * [Auto-flush for channels. (`ChannelHandler` implementation)](https://github.com/netty/netty/pull/5716)
+     *  * [Consider removing executeAfterEventLoopIteration](https://github.com/netty/netty/issues/7833)
+     *
+     * 老艿艿：未来会移除该队列，前提是实现了 Channel 的 auto flush 功能。按照最后一个 issue 的讨论
+     */
     private final Queue<Runnable> tailTasks;
 
     protected SingleThreadEventLoop(EventLoopGroup parent, ThreadFactory threadFactory, boolean addTaskWakesUp) {
@@ -77,7 +90,9 @@ public abstract class SingleThreadEventLoop extends SingleThreadEventExecutor im
     @Override
     public ChannelFuture register(final ChannelPromise promise) {
         ObjectUtil.checkNotNull(promise, "promise");
+        // 注册 Channel 到 EventLoop 上
         promise.channel().unsafe().register(this, promise);
+        // 返回 ChannelPromise 对象
         return promise;
     }
 
@@ -103,14 +118,18 @@ public abstract class SingleThreadEventLoop extends SingleThreadEventExecutor im
     @UnstableApi
     public final void executeAfterEventLoopIteration(Runnable task) {
         ObjectUtil.checkNotNull(task, "task");
+        // 关闭时，拒绝任务
         if (isShutdown()) {
             reject();
         }
 
+        // 添加到任务队列
         if (!tailTasks.offer(task)) {
+            // 添加失败，则拒绝任务
             reject(task);
         }
 
+        // 唤醒线程
         if (wakesUpForTask(task)) {
             wakeup(inEventLoop());
         }

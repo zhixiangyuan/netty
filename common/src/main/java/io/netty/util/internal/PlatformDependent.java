@@ -802,7 +802,11 @@ public final class PlatformDependent {
         }
         return hash;
     }
-
+    /**
+     * Mpsc 指的是 multiple producers (different threads) and a single consumer (one thread!)
+     *
+     *
+     */
     private static final class Mpsc {
         private static final boolean USE_MPSC_CHUNKED_ARRAY_QUEUE;
 

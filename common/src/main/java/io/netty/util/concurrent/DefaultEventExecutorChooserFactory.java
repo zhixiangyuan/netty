@@ -24,7 +24,7 @@ import java.util.concurrent.atomic.AtomicInteger;
  */
 @UnstableApi
 public final class DefaultEventExecutorChooserFactory implements EventExecutorChooserFactory {
-
+    /** 单例 */
     public static final DefaultEventExecutorChooserFactory INSTANCE = new DefaultEventExecutorChooserFactory();
 
     private DefaultEventExecutorChooserFactory() { }
@@ -39,12 +39,16 @@ public final class DefaultEventExecutorChooserFactory implements EventExecutorCh
         }
     }
 
+    /** 是否为 2 的幂次方 */
     private static boolean isPowerOfTwo(int val) {
+        // 这个路子有点野
         return (val & -val) == val;
     }
 
     private static final class PowerOfTwoEventExecutorChooser implements EventExecutorChooser {
+        /** 自增序列 */
         private final AtomicInteger idx = new AtomicInteger();
+        /** EventExecutor 数组 */
         private final EventExecutor[] executors;
 
         PowerOfTwoEventExecutorChooser(EventExecutor[] executors) {

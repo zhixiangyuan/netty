@@ -53,7 +53,10 @@ public abstract class AbstractNioChannel extends AbstractChannel {
 
     private static final ClosedChannelException DO_CLOSE_CLOSED_CHANNEL_EXCEPTION = ThrowableUtil.unknownStackTrace(
             new ClosedChannelException(), AbstractNioChannel.class, "doClose()");
-
+    /**
+     * 对于 Nio 这里的 SelectableChannel 便是其子类 ServerSocketChannel
+     * 这个 channel 便是服务端的 channel，相当于 socket
+     */
     private final SelectableChannel ch;
     protected final int readInterestOp;
     volatile SelectionKey selectionKey;
@@ -76,9 +79,9 @@ public abstract class AbstractNioChannel extends AbstractChannel {
     /**
      * Create a new instance
      *
-     * @param parent            the parent {@link Channel} by which this instance was created. May be {@code null}
-     * @param ch                the underlying {@link SelectableChannel} on which it operates
-     * @param readInterestOp    the ops to set to receive data from the {@link SelectableChannel}
+     * @param parent         the parent {@link Channel} by which this instance was created. May be {@code null}
+     * @param ch             the underlying {@link SelectableChannel} on which it operates
+     * @param readInterestOp the ops to set to receive data from the {@link SelectableChannel}
      */
     protected AbstractNioChannel(Channel parent, SelectableChannel ch, int readInterestOp) {
         super(parent);
@@ -110,6 +113,7 @@ public abstract class AbstractNioChannel extends AbstractChannel {
         return (NioUnsafe) super.unsafe();
     }
 
+    /** 获取之前创建的 jdk channel */
     protected SelectableChannel javaChannel() {
         return ch;
     }
@@ -381,9 +385,22 @@ public abstract class AbstractNioChannel extends AbstractChannel {
     @Override
     protected void doRegister() throws Exception {
         boolean selected = false;
-        for (;;) {
+        // 可以看到这里便是注册 selector 到 channel 上去
+        for (; ; ) {
             try {
-                selectionKey = javaChannel().register(eventLoop().unwrappedSelector(), 0, this);
+                selectionKey =
+                        // 获取之前初始化的 jdk channel
+                        javaChannel()
+                                // 执行注册操作，将 channel 绑定到 selector 上面
+                                .register(
+                                        // 第一个参数便是获取 selector
+                                        eventLoop().unwrappedSelector(),
+                                        // 表示关心什么事件，0 表示什么都不关心，仅仅注册 channel
+                                        0,
+                                        // 这里将 this 作为附属品绑定到 SelectionKey 上面去，将来
+                                        // 遍历出来的 SelectionKey 可以将 this 拿出来干一些操作
+                                        this
+                                );
                 return;
             } catch (CancelledKeyException e) {
                 if (!selected) {

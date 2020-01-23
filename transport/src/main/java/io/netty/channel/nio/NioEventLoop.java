@@ -52,6 +52,9 @@ import java.util.concurrent.atomic.AtomicBoolean;
  * {@link SingleThreadEventLoop} implementation which register the {@link Channel}'s to a
  * {@link Selector} and so does the multi-plexing of these in the event loop.
  *
+ * 1. 该类负责新连接的接入
+ * 2. 数据流的读写
+ *
  */
 public final class NioEventLoop extends SingleThreadEventLoop {
 
@@ -59,10 +62,13 @@ public final class NioEventLoop extends SingleThreadEventLoop {
 
     private static final int CLEANUP_INTERVAL = 256; // XXX Hard-coded value, but won't need customization.
 
+    /** 是否禁用 SelectionKey 的优化，默认开启 */
     private static final boolean DISABLE_KEY_SET_OPTIMIZATION =
             SystemPropertyUtil.getBoolean("io.netty.noKeySetOptimization", false);
 
+    /** 少于该 N 值，不开启空轮询重建新的 Selector 对象的功能 */
     private static final int MIN_PREMATURE_SELECTOR_RETURNS = 3;
+    /** NIO Selector 空轮询该 N 次后，重建新的 Selector 对象 */
     private static final int SELECTOR_AUTO_REBUILD_THRESHOLD;
 
     private final IntSupplier selectNowSupplier = new IntSupplier() {
@@ -78,6 +84,7 @@ public final class NioEventLoop extends SingleThreadEventLoop {
     // - http://bugs.sun.com/view_bug.do?bug_id=6427854
     // - https://github.com/netty/netty/issues/203
     static {
+        // 解决 Selector#open() 方法
         final String key = "sun.nio.ch.bugLevel";
         final String bugLevel = SystemPropertyUtil.get(key);
         if (bugLevel == null) {
@@ -94,6 +101,7 @@ public final class NioEventLoop extends SingleThreadEventLoop {
             }
         }
 
+        // 初始化
         int selectorAutoRebuildThreshold = SystemPropertyUtil.getInt("io.netty.selectorAutoRebuildThreshold", 512);
         if (selectorAutoRebuildThreshold < MIN_PREMATURE_SELECTOR_RETURNS) {
             selectorAutoRebuildThreshold = 0;
@@ -109,11 +117,15 @@ public final class NioEventLoop extends SingleThreadEventLoop {
 
     /**
      * The NIO {@link Selector}.
+     *
+     * 包装的 Selector 对象，经过优化 {@link #openSelector()}
      */
     private Selector selector;
+    /** 未包装的 Selector 对象 */
     private Selector unwrappedSelector;
+    /** 注册的 SelectionKey 集合。Netty 自己实现，经过优化。 */
     private SelectedSelectionKeySet selectedKeys;
-
+    /** SelectorProvider 对象，用于创建 Selector 对象 */
     private final SelectorProvider provider;
 
     /**
@@ -121,13 +133,17 @@ public final class NioEventLoop extends SingleThreadEventLoop {
      * break out of its selection process. In our case we use a timeout for
      * the select method and the select method will block for that time unless
      * waken up.
+     *
+     * 唤醒标记。因为唤醒方法 {@link Selector#wakeup()} 开销比较大，通过该标识，减少调用
      */
     private final AtomicBoolean wakenUp = new AtomicBoolean();
-
+    /** Select 策略 */
     private final SelectStrategy selectStrategy;
-
+    /** 处理 Channel 的就绪的 IO 事件，占处理任务的总时间的比例 */
     private volatile int ioRatio = 50;
+    /** 取消 SelectionKey 的数量 */
     private int cancelledKeys;
+    /** 是否需要再次 select Selector 对象 */
     private boolean needsToSelectAgain;
 
     NioEventLoop(NioEventLoopGroup parent, Executor executor, SelectorProvider selectorProvider,
@@ -140,6 +156,7 @@ public final class NioEventLoop extends SingleThreadEventLoop {
             throw new NullPointerException("selectStrategy");
         }
         provider = selectorProvider;
+        // 创建 Selector 对象
         final SelectorTuple selectorTuple = openSelector();
         selector = selectorTuple.selector;
         unwrappedSelector = selectorTuple.unwrappedSelector;
@@ -258,7 +275,6 @@ public final class NioEventLoop extends SingleThreadEventLoop {
 
     /**
      * Returns the {@link SelectorProvider} used by this {@link NioEventLoop} to obtain the {@link Selector}.
-     */
     public SelectorProvider selectorProvider() {
         return provider;
     }
@@ -679,6 +695,8 @@ public final class NioEventLoop extends SingleThreadEventLoop {
             // Also check for readOps of 0 to workaround possible JDK bug which may otherwise lead
             // to a spin loop
             if ((readyOps & (SelectionKey.OP_READ | SelectionKey.OP_ACCEPT)) != 0 || readyOps == 0) {
+                // unsafe 主要实现类有两个，一个是 NioByteUnsafe，另一个是 NioMessageUnsafe，
+                // NioByteUnsafe 主要处理数据流的读写，NioMessageUnsafe 主要用于处理新连接进来的处理
                 unsafe.read();
             }
         } catch (CancelledKeyException ignored) {
@@ -761,6 +779,10 @@ public final class NioEventLoop extends SingleThreadEventLoop {
         }
     }
 
+    /**
+     * 对应普通 io 里面的 accept 操作，普通 io 里面的 get 输出流，也对应着
+     * select 的操作
+     */
     private void select(boolean oldWakenUp) throws IOException {
         Selector selector = this.selector;
         try {
