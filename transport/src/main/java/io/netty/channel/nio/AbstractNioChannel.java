@@ -432,8 +432,14 @@ public abstract class AbstractNioChannel extends AbstractChannel {
 
         readPending = true;
 
+        // 之前注册的是 0，所以获取出来的 interestOps 便是 0
         final int interestOps = selectionKey.interestOps();
+        // 这里 0 & 任意数都是 0
+        // 同时 0b0000_0001 & 0b0000_0010 也为 0
+        // 其含义就是 readInterestOp 表示的感兴趣的事件是否已经注册在其上面
         if ((interestOps & readInterestOp) == 0) {
+            // interestOps | readInterestOp 表示将两种感兴趣的事件合并一下再次注册上去
+            // 比如 0b0000_0001 | 0b0000_0010 为 0b0000_0011
             selectionKey.interestOps(interestOps | readInterestOp);
         }
     }

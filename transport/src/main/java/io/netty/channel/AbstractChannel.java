@@ -76,8 +76,7 @@ public abstract class AbstractChannel extends DefaultAttributeMap implements Cha
     /**
      * Creates a new instance.
      *
-     * @param parent
-     *        the parent of this channel. {@code null} if there's no parent.
+     * @param parent the parent of this channel. {@code null} if there's no parent.
      */
     protected AbstractChannel(Channel parent) {
         this.parent = parent;
@@ -89,8 +88,7 @@ public abstract class AbstractChannel extends DefaultAttributeMap implements Cha
     /**
      * Creates a new instance.
      *
-     * @param parent
-     *        the parent of this channel. {@code null} if there's no parent.
+     * @param parent the parent of this channel. {@code null} if there's no parent.
      */
     protected AbstractChannel(Channel parent, ChannelId id) {
         this.parent = parent;
@@ -388,28 +386,28 @@ public abstract class AbstractChannel extends DefaultAttributeMap implements Cha
         SocketAddress localAddr = localAddress();
         if (remoteAddr != null) {
             StringBuilder buf = new StringBuilder(96)
-                .append("[id: 0x")
-                .append(id.asShortText())
-                .append(", L:")
-                .append(localAddr)
-                .append(active? " - " : " ! ")
-                .append("R:")
-                .append(remoteAddr)
-                .append(']');
+                    .append("[id: 0x")
+                    .append(id.asShortText())
+                    .append(", L:")
+                    .append(localAddr)
+                    .append(active ? " - " : " ! ")
+                    .append("R:")
+                    .append(remoteAddr)
+                    .append(']');
             strVal = buf.toString();
         } else if (localAddr != null) {
             StringBuilder buf = new StringBuilder(64)
-                .append("[id: 0x")
-                .append(id.asShortText())
-                .append(", L:")
-                .append(localAddr)
-                .append(']');
+                    .append("[id: 0x")
+                    .append(id.asShortText())
+                    .append(", L:")
+                    .append(localAddr)
+                    .append(']');
             strVal = buf.toString();
         } else {
             StringBuilder buf = new StringBuilder(16)
-                .append("[id: 0x")
-                .append(id.asShortText())
-                .append(']');
+                    .append("[id: 0x")
+                    .append(id.asShortText())
+                    .append(']');
             strVal = buf.toString();
         }
 
@@ -539,6 +537,7 @@ public abstract class AbstractChannel extends DefaultAttributeMap implements Cha
             }
         }
 
+        /** ServerBootstrap 的 bind 方法最终便会调用到这里 */
         @Override
         public final void bind(final SocketAddress localAddress, final ChannelPromise promise) {
             assertEventLoop();
@@ -549,19 +548,21 @@ public abstract class AbstractChannel extends DefaultAttributeMap implements Cha
 
             // See: https://github.com/netty/netty/issues/576
             if (Boolean.TRUE.equals(config().getOption(ChannelOption.SO_BROADCAST)) &&
-                localAddress instanceof InetSocketAddress &&
-                !((InetSocketAddress) localAddress).getAddress().isAnyLocalAddress() &&
-                !PlatformDependent.isWindows() && !PlatformDependent.maybeSuperUser()) {
+                    localAddress instanceof InetSocketAddress &&
+                    !((InetSocketAddress) localAddress).getAddress().isAnyLocalAddress() &&
+                    !PlatformDependent.isWindows() && !PlatformDependent.maybeSuperUser()) {
                 // Warn a user about the fact that a non-root user can't receive a
                 // broadcast packet on *nix if the socket is bound on non-wildcard address.
                 logger.warn(
                         "A non-root user can't receive a broadcast packet if the socket " +
-                        "is not bound to a wildcard address; binding to a non-wildcard " +
-                        "address (" + localAddress + ") anyway as requested.");
+                                "is not bound to a wildcard address; binding to a non-wildcard " +
+                                "address (" + localAddress + ") anyway as requested.");
             }
 
+            // 判断在 bind 之前 channel 是否是 active
             boolean wasActive = isActive();
             try {
+                // 核心 bind 逻辑，触发 JDK 底层的 bind
                 doBind(localAddress);
             } catch (Throwable t) {
                 safeSetFailure(promise, t);
@@ -569,10 +570,18 @@ public abstract class AbstractChannel extends DefaultAttributeMap implements Cha
                 return;
             }
 
-            if (!wasActive && isActive()) {
+            if (
+                // 如果在 bind 之前不是 active
+                    !wasActive &&
+                            // bind 之后是 active
+                            isActive()
+            ) {
+                // 触发 ChannelActive
                 invokeLater(new Runnable() {
                     @Override
                     public void run() {
+                        // 触发 ChannelActive
+                        // 最终会调用到 HeadContext.channelActive 方法
                         pipeline.fireChannelActive();
                     }
                 });
@@ -631,6 +640,7 @@ public abstract class AbstractChannel extends DefaultAttributeMap implements Cha
         /**
          * Shutdown the output portion of the corresponding {@link Channel}.
          * For example this will clean up the {@link ChannelOutboundBuffer} and not allow any more writes.
+         *
          * @param cause The cause which may provide rational for the shutdown.
          */
         private void shutdownOutput(final ChannelPromise promise, Throwable cause) {
