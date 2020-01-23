@@ -77,6 +77,7 @@ public abstract class MultithreadEventExecutorGroup extends AbstractEventExecuto
         }
 
         // 创建执行器
+        // 创建线程创建器
         if (executor == null) {
             executor = new ThreadPerTaskExecutor(newDefaultThreadFactory());
         }
@@ -84,8 +85,10 @@ public abstract class MultithreadEventExecutorGroup extends AbstractEventExecuto
         // 创建 EventExecutor 数组
         children = new EventExecutor[nThreads];
 
+        // 通过 for 循环去创建每一个 NioEventLoop
         for (int i = 0; i < nThreads; i ++) {
-            boolean success = false; // 是否创建成功
+            // 是否创建成功
+            boolean success = false;
             try {
                 // 创建 EventExecutor 对象
                 children[i] = newChild(executor, args);
@@ -121,6 +124,7 @@ public abstract class MultithreadEventExecutorGroup extends AbstractEventExecuto
         }
 
         // 创建 EventExecutor 选择器
+        // 创建线程选择器
         chooser = chooserFactory.newChooser(children);
 
         // 创建监听器，用于 EventExecutor 终止时的监听

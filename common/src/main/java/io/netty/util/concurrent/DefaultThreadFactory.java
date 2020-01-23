@@ -27,9 +27,12 @@ import java.util.concurrent.atomic.AtomicInteger;
  */
 public class DefaultThreadFactory implements ThreadFactory {
 
+    /** 线程池的 id，每创建一个便自增一次 */
     private static final AtomicInteger poolId = new AtomicInteger();
 
+    /** 线程的 id，每创建一个便自增一次 */
     private final AtomicInteger nextId = new AtomicInteger();
+    /** NioEventLoop 的名字的前缀 */
     private final String prefix;
     private final boolean daemon;
     private final int priority;
@@ -68,6 +71,7 @@ public class DefaultThreadFactory implements ThreadFactory {
             throw new NullPointerException("poolType");
         }
 
+        // 生成线程池的名字
         String poolName = StringUtil.simpleClassName(poolType);
         switch (poolName.length()) {
             case 0:
@@ -92,7 +96,10 @@ public class DefaultThreadFactory implements ThreadFactory {
                     "priority: " + priority + " (expected: Thread.MIN_PRIORITY <= priority <= Thread.MAX_PRIORITY)");
         }
 
-        prefix = poolName + '-' + poolId.incrementAndGet() + '-';
+        // NioEventLoop 名字的前缀
+        prefix = poolName + '-' +
+                // 每次创建一个都会自增
+                poolId.incrementAndGet() + '-';
         this.daemon = daemon;
         this.priority = priority;
         this.threadGroup = threadGroup;
@@ -121,6 +128,7 @@ public class DefaultThreadFactory implements ThreadFactory {
     }
 
     protected Thread newThread(Runnable r, String name) {
+        // 这里可以看出来 netty 底层使用 thread 不是原生的 thread，而是包装出来的 FastThreadLocalThread
         return new FastThreadLocalThread(threadGroup, r, name);
     }
 }
