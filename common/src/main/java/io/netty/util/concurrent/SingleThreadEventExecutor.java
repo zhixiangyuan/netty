@@ -86,7 +86,7 @@ public abstract class SingleThreadEventExecutor extends AbstractScheduledEventEx
                     SingleThreadEventExecutor.class, ThreadProperties.class, "threadProperties");
     /** 任务队列 */
     private final Queue<Runnable> taskQueue;
-    /** 线程 */
+    /** 每一个 NioEventLoop 都会绑定一个线程 */
     private volatile Thread thread;
     /** 线程属性 */
     @SuppressWarnings("unused")
@@ -288,13 +288,16 @@ public abstract class SingleThreadEventExecutor extends AbstractScheduledEventEx
 
     private boolean fetchFromScheduledTaskQueue() {
         long nanoTime = AbstractScheduledEventExecutor.nanoTime();
+        // 拉取截止时间为 nanoTime 的定时任务
         Runnable scheduledTask  = pollScheduledTask(nanoTime);
         while (scheduledTask != null) {
             if (!taskQueue.offer(scheduledTask)) {
                 // No space left in the task queue add it back to the scheduledTaskQueue so we pick it up again.
+                // 添加失败则将定时任务再次放回定时任务队列
                 scheduledTaskQueue().add((ScheduledFutureTask<?>) scheduledTask);
                 return false;
             }
+            // 再次拉取定时任务
             scheduledTask  = pollScheduledTask(nanoTime);
         }
         return true;
@@ -410,13 +413,17 @@ public abstract class SingleThreadEventExecutor extends AbstractScheduledEventEx
      * the tasks in the task queue and returns if it ran longer than {@code timeoutNanos}.
      */
     protected boolean runAllTasks(long timeoutNanos) {
+        // 从定时任务队列中拉取任务放到普通队列里面
         fetchFromScheduledTaskQueue();
+        // 从普通队列里面拉取任务
         Runnable task = pollTask();
         if (task == null) {
+            // 每次跑完所有任务可以执行一个收尾的操作
             afterRunningAllTasks();
             return false;
         }
-
+        // timeoutNanos 表示执行任务尽可能不要超过这个时间
+        // 所以这里计算一下截止时间
         final long deadline = ScheduledFutureTask.nanoTime() + timeoutNanos;
         long runTasks = 0;
         long lastExecutionTime;
@@ -427,6 +434,7 @@ public abstract class SingleThreadEventExecutor extends AbstractScheduledEventEx
 
             // Check timeout every 64 tasks because nanoTime() is relatively expensive.
             // XXX: Hard-coded value - will make it configurable if it is really a problem.
+            // ScheduledFutureTask.nanoTime() 是一个相对耗时的操作，所以每跑 64 个任务检查一下是否超时
             if ((runTasks & 0x3F) == 0) {
                 lastExecutionTime = ScheduledFutureTask.nanoTime();
                 if (lastExecutionTime >= deadline) {
@@ -434,6 +442,7 @@ public abstract class SingleThreadEventExecutor extends AbstractScheduledEventEx
                 }
             }
 
+            // 拿任务
             task = pollTask();
             if (task == null) {
                 lastExecutionTime = ScheduledFutureTask.nanoTime();
@@ -771,12 +780,13 @@ public abstract class SingleThreadEventExecutor extends AbstractScheduledEventEx
         if (task == null) {
             throw new NullPointerException("task");
         }
-
-        // 获得当前是否在 EventLoop 的线程中
+        // 这个 execute 会被别的线程执行，所以这里判断当前线程是否是 EventLoop 的线程
+        // 初始化的时候这里是 Main 线程调进来的，所以这里会返回 false
         boolean inEventLoop = inEventLoop();
         // 添加到任务队列
         addTask(task);
         if (!inEventLoop) {
+            // 在初始化的时候由于 inEventLoop 为 false，所以会进来
             // 创建线程
             startThread();
             // 若已经关闭
@@ -917,6 +927,7 @@ public abstract class SingleThreadEventExecutor extends AbstractScheduledEventEx
 
     private void doStartThread() {
         assert thread == null;
+        // 这里的 executor 便是 ThreadPerTaskExecutor，每次 execute 的时候都会创建一个新的线程
         executor.execute(new Runnable() {
             @Override
             public void run() {

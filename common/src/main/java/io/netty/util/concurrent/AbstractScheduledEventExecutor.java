@@ -101,6 +101,7 @@ public abstract class AbstractScheduledEventExecutor extends AbstractEventExecut
     protected final Runnable pollScheduledTask(long nanoTime) {
         assert inEventLoop();
 
+        // 拿到定时任务队列
         Queue<ScheduledFutureTask<?>> scheduledTaskQueue = this.scheduledTaskQueue;
         ScheduledFutureTask<?> scheduledTask = scheduledTaskQueue == null ? null : scheduledTaskQueue.peek();
         if (scheduledTask == null) {
@@ -226,9 +227,14 @@ public abstract class AbstractScheduledEventExecutor extends AbstractEventExecut
     }
 
     <V> ScheduledFuture<V> schedule(final ScheduledFutureTask<V> task) {
+        // 判断是外部线程发起的 schedule 还是 EventLoop 发起的 schedule
         if (inEventLoop()) {
+            // 如果是 NioEventLoop 里面发起的那么则直接添加进定时任务队列
             scheduledTaskQueue().add(task);
         } else {
+            // 如果不是的话，那么则转化为 execute 去执行，execute 里面会转化为排队队列去执行
+            // 之所以这样做是因为 scheduledTaskQueue() 的队列是一个 DefaultPriorityQueue
+            // 它是非线程安全的，所以通过这种方式去保证线程安全
             execute(new Runnable() {
                 @Override
                 public void run() {

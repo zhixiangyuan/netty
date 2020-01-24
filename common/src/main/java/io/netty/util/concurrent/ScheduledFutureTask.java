@@ -104,16 +104,26 @@ final class ScheduledFutureTask<V> extends PromiseTask<V> implements ScheduledFu
         }
 
         ScheduledFutureTask<?> that = (ScheduledFutureTask<?>) o;
-        long d = deadlineNanos() - that.deadlineNanos();
+        long d =
+                // 获取当前任务的截止时间
+                deadlineNanos() -
+                        // 获取被比较的任务的截止时间
+                        that.deadlineNanos();
         if (d < 0) {
+            // 截止时间小的在前面
             return -1;
         } else if (d > 0) {
+            // 截止时间大的在后面
             return 1;
-        } else if (id < that.id) {
+        }
+        // 当截止时间相同的时候通过 id 来比较
+        else if (id < that.id) {
+            // id 小的在前面
             return -1;
         } else if (id == that.id) {
             throw new Error();
         } else {
+            // id 大的在后面
             return 1;
         }
     }
