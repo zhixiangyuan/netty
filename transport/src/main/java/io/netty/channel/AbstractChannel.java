@@ -520,6 +520,8 @@ public abstract class AbstractChannel extends DefaultAttributeMap implements Cha
                 // multiple channel actives if the channel is deregistered and re-registered.
                 if (isActive()) {
                     if (firstRegistration) {
+                        // 这里在 channel 注册到 selector 上面之后
+                        // 会在其感兴趣的事件上面添加 accept
                         pipeline.fireChannelActive();
                     } else if (config().isAutoRead()) {
                         // This channel was registered before and autoRead() is set. This means we need to begin read

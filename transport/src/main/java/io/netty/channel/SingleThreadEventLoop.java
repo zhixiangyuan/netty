@@ -91,6 +91,7 @@ public abstract class SingleThreadEventLoop extends SingleThreadEventExecutor im
     public ChannelFuture register(final ChannelPromise promise) {
         ObjectUtil.checkNotNull(promise, "promise");
         // 注册 Channel 到 EventLoop 上
+        // 这里的 promise 是对于 channel 的包装
         promise.channel().unsafe().register(this, promise);
         // 返回 ChannelPromise 对象
         return promise;

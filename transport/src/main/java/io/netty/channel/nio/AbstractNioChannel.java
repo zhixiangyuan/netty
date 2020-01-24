@@ -396,6 +396,8 @@ public abstract class AbstractNioChannel extends AbstractChannel {
                                         // 第一个参数便是获取 selector
                                         eventLoop().unwrappedSelector(),
                                         // 表示关心什么事件，0 表示什么都不关心，仅仅注册 channel
+                                        // 这里注册为 0，我的理解是在这个地方暂时还不希望关注事件，哪怕有数据也别读出来
+                                        // 等到后面一切都准备好了再将事件改为接受 accept
                                         0,
                                         // 这里将 this 作为附属品绑定到 SelectionKey 上面去，将来
                                         // 遍历出来的 SelectionKey 可以将 this 拿出来干一些操作

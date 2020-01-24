@@ -189,6 +189,7 @@ abstract class AbstractChannelHandlerContext implements ChannelHandlerContext, R
     }
 
     static void invokeChannelActive(final AbstractChannelHandlerContext next) {
+        // 这里的 EventExecutor 其实就是 NioEventLoop
         EventExecutor executor = next.executor();
         if (executor.inEventLoop()) {
             next.invokeChannelActive();

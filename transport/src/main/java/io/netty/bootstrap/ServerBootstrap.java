@@ -47,7 +47,9 @@ public class ServerBootstrap extends AbstractBootstrap<ServerBootstrap, ServerCh
     private final Map<ChannelOption<?>, Object> childOptions = new LinkedHashMap<ChannelOption<?>, Object>();
     private final Map<AttributeKey<?>, Object> childAttrs = new LinkedHashMap<AttributeKey<?>, Object>();
     private final ServerBootstrapConfig config = new ServerBootstrapConfig(this);
-    /** 这个 group 便是服务端实际处理 io 读写的 group */
+    /**
+     * 这个 group 便是服务端实际处理 io 读写的 group，也就是我们注册的 workGroup
+     */
     private volatile EventLoopGroup childGroup;
     /** 用户自定义的处理器注册逻辑便在其中，一般是实现 ChannelInitializer 的 initChannel 方法 */
     private volatile ChannelHandler childHandler;
@@ -185,6 +187,8 @@ public class ServerBootstrap extends AbstractBootstrap<ServerBootstrap, ServerCh
                     pipeline.addLast(handler);
                 }
 
+                // 需要注意的是，这里的 ch 是接入连接的 ch
+                // 这里的 pipeline 同样是接入连接的 pipeline
                 ch.eventLoop().execute(new Runnable() {
                     @Override
                     public void run() {
@@ -251,17 +255,25 @@ public class ServerBootstrap extends AbstractBootstrap<ServerBootstrap, ServerCh
         @Override
         @SuppressWarnings("unchecked")
         public void channelRead(ChannelHandlerContext ctx, Object msg) {
+            // 这里的 child 是 接入连接后封装出来的 NioServerSocketChannel
+            // 这个 NioServerSocketChannel 需要用于处理数据
             final Channel child = (Channel) msg;
 
+            // 为这个子 Channel 设置处理器
             child.pipeline().addLast(childHandler);
 
+            // 设置 Option
             setChannelOptions(child, childOptions, logger);
 
+            // 设置 Attr
             for (Entry<AttributeKey<?>, Object> e: childAttrs) {
                 child.attr((AttributeKey<Object>) e.getKey()).set(e.getValue());
             }
 
             try {
+                // 这里的 childGroup 是 workGroup
+                // 在 workGroup 上面注册处理数据的 channel
+                // 也就是为处理数据的 channel 找一个 EventLoop
                 childGroup.register(child).addListener(new ChannelFutureListener() {
                     @Override
                     public void operationComplete(ChannelFuture future) throws Exception {

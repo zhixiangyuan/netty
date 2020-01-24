@@ -61,10 +61,14 @@ public abstract class AbstractNioMessageChannel extends AbstractNioChannel {
 
         @Override
         public void read() {
+            // 首先确保是 EventLoop 的线程调用的
+            // 如果是外部线程调用的，剩下的逻辑就不进行了
             assert eventLoop().inEventLoop();
             final ChannelConfig config = config();
             final ChannelPipeline pipeline = pipeline();
+            // 此处的 Handler 用于处理服务端接受的速率
             final RecvByteBufAllocator.Handle allocHandle = unsafe().recvBufAllocHandle();
+            // 首先重置配置
             allocHandle.reset(config);
 
             boolean closed = false;
@@ -72,6 +76,9 @@ public abstract class AbstractNioMessageChannel extends AbstractNioChannel {
             try {
                 try {
                     do {
+                        // localRead 为读取到的连接数
+                        // doReadMessages 内部通过 Jdk 的 Channel 来获取新连接 Channel
+                        // 然后包装成 Netty 自定义的 Channel
                         int localRead = doReadMessages(readBuf);
                         if (localRead == 0) {
                             break;
@@ -81,6 +88,7 @@ public abstract class AbstractNioMessageChannel extends AbstractNioChannel {
                             break;
                         }
 
+                        // 对新读取的连接数进行计数
                         allocHandle.incMessagesRead(localRead);
                     } while (allocHandle.continueReading());
                 } catch (Throwable t) {

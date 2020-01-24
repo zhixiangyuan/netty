@@ -252,6 +252,10 @@ public class DefaultSocketChannelConfig extends DefaultChannelConfig
     @Override
     public SocketChannelConfig setTcpNoDelay(boolean tcpNoDelay) {
         try {
+            // 设置是否启用 Nagle 算法
+            // tcpNoDelay 为 true 则说明关闭 Nagle 算法
+            // tcpNoDelay 为 false 则说明开启 Nagle 算法
+            // 关闭 Nagle 后，小的数据包会尽可能的快的发出去
             javaSocket.setTcpNoDelay(tcpNoDelay);
         } catch (SocketException e) {
             throw new ChannelException(e);
