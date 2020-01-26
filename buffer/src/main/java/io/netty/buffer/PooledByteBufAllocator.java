@@ -41,10 +41,15 @@ public class PooledByteBufAllocator extends AbstractByteBufAllocator implements 
     private static final int DEFAULT_NUM_HEAP_ARENA;
     private static final int DEFAULT_NUM_DIRECT_ARENA;
 
+    // 默认是 8192
     private static final int DEFAULT_PAGE_SIZE;
+    // 默认是 11
     private static final int DEFAULT_MAX_ORDER; // 8192 << 11 = 16 MiB per chunk
+    // 默认是 512
     private static final int DEFAULT_TINY_CACHE_SIZE;
+    // 默认是 256
     private static final int DEFAULT_SMALL_CACHE_SIZE;
+    // 默认是 64
     private static final int DEFAULT_NORMAL_CACHE_SIZE;
     private static final int DEFAULT_MAX_CACHED_BUFFER_CAPACITY;
     private static final int DEFAULT_CACHE_TRIM_INTERVAL;
@@ -95,6 +100,9 @@ public class PooledByteBufAllocator extends AbstractByteBufAllocator implements 
          *
          * See https://github.com/netty/netty/issues/3888.
          */
+        // 两倍的 cpu 核数
+        // 这里之所以分配两倍的 cpu 核数的 arena 是由之前我们初始化工作线程的时候也是初始化两倍的 cpu 核数
+        // 个工作线程，这样每个线程就可以有自己的 arena
         final int defaultMinNumArena = NettyRuntime.availableProcessors() * 2;
         final int defaultChunkSize = DEFAULT_PAGE_SIZE << DEFAULT_MAX_ORDER;
         DEFAULT_NUM_HEAP_ARENA = Math.max(0,
@@ -248,6 +256,7 @@ public class PooledByteBufAllocator extends AbstractByteBufAllocator implements 
         int pageShifts = validateAndCalculatePageShifts(pageSize);
 
         if (nHeapArena > 0) {
+            // 创建 heapArenas
             heapArenas = newArenaArray(nHeapArena);
             List<PoolArenaMetric> metrics = new ArrayList<PoolArenaMetric>(heapArenas.length);
             for (int i = 0; i < heapArenas.length; i ++) {
@@ -264,6 +273,7 @@ public class PooledByteBufAllocator extends AbstractByteBufAllocator implements 
         }
 
         if (nDirectArena > 0) {
+            // 创建 directArenas
             directArenas = newArenaArray(nDirectArena);
             List<PoolArenaMetric> metrics = new ArrayList<PoolArenaMetric>(directArenas.length);
             for (int i = 0; i < directArenas.length; i ++) {
@@ -334,7 +344,9 @@ public class PooledByteBufAllocator extends AbstractByteBufAllocator implements 
 
     @Override
     protected ByteBuf newDirectBuffer(int initialCapacity, int maxCapacity) {
+        // 每个线程获取自己的 PoolThreadCache
         PoolThreadCache cache = threadCache.get();
+        // 从该 PoolThreadCache 中拿出 directArena
         PoolArena<ByteBuffer> directArena = cache.directArena;
 
         final ByteBuf buf;

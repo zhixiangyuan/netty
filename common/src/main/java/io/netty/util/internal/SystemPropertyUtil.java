@@ -127,6 +127,8 @@ public final class SystemPropertyUtil {
      * {@code key}, while falling back to the specified default value if
      * the property access fails.
      *
+     * 如果系统里面没有设置属性 key，则使用默认值 def
+     *
      * @return the property value.
      *         {@code def} if there's no such property or if an access to the
      *         specified property is not allowed.

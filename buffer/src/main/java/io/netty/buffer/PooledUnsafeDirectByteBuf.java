@@ -29,6 +29,7 @@ import java.nio.channels.GatheringByteChannel;
 import java.nio.channels.ScatteringByteChannel;
 
 final class PooledUnsafeDirectByteBuf extends PooledByteBuf<ByteBuffer> {
+    /** 这里的 RECYCLER 是一个对象池 */
     private static final Recycler<PooledUnsafeDirectByteBuf> RECYCLER = new Recycler<PooledUnsafeDirectByteBuf>() {
         @Override
         protected PooledUnsafeDirectByteBuf newObject(Handle<PooledUnsafeDirectByteBuf> handle) {
@@ -38,6 +39,8 @@ final class PooledUnsafeDirectByteBuf extends PooledByteBuf<ByteBuffer> {
 
     static PooledUnsafeDirectByteBuf newInstance(int maxCapacity) {
         PooledUnsafeDirectByteBuf buf = RECYCLER.get();
+        // 上面拿出来的 buf 可能是新创建的，也可能是之前用过的，如果是用过的
+        // 那么这里进行一个重用的动作，将 buf 中的索引和参数都进行初始化
         buf.reuse(maxCapacity);
         return buf;
     }

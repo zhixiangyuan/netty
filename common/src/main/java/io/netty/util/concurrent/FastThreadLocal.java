@@ -122,9 +122,15 @@ public class FastThreadLocal<V> {
         variablesToRemove.remove(variable);
     }
 
+    /**
+     * 这里的 index 不是静态的，同时看下面的构造函数可以发现其是
+     * 会不断增加的，那么便说明这个 FastThreadLocal 会被 new 很多个
+     */
     private final int index;
 
     public FastThreadLocal() {
+        // 每一次创建新的 FastThreadLocal 都会调用这个构造函数
+        // 所以这个 index 表示的便是当前是创建的第几个 index
         index = InternalThreadLocalMap.nextVariableIndex();
     }
 

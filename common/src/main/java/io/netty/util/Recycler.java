@@ -157,12 +157,16 @@ public abstract class Recycler<T> {
         if (maxCapacityPerThread == 0) {
             return newObject((Handle<T>) NOOP_HANDLE);
         }
+        // 每一个线程都一个自己的 stack
         Stack<T> stack = threadLocal.get();
+        // 从栈中获取 handle
         DefaultHandle<T> handle = stack.pop();
+        // 如果 handle 为 null 则去创建一个
         if (handle == null) {
             handle = stack.newHandle();
             handle.value = newObject(handle);
         }
+        // 返回 handle 中的值
         return (T) handle.value;
     }
 
@@ -180,6 +184,7 @@ public abstract class Recycler<T> {
             return false;
         }
 
+        // 循环的时候将其推回线程栈中
         h.recycle(o);
         return true;
     }
@@ -195,6 +200,9 @@ public abstract class Recycler<T> {
     protected abstract T newObject(Handle<T> handle);
 
     public interface Handle<T> {
+        /**
+         * 回收对象
+         */
         void recycle(T object);
     }
 

@@ -37,6 +37,8 @@ import java.util.concurrent.atomic.AtomicBoolean;
  * technics of
  * <a href="https://www.facebook.com/notes/facebook-engineering/scalable-memory-allocation-using-jemalloc/480222803919">
  * Scalable memory allocation using jemalloc</a>.
+ *
+ * 每一个线程都会有一个自己的 PoolThreadCache
  */
 final class PoolThreadCache {
 
@@ -72,12 +74,15 @@ final class PoolThreadCache {
         this.heapArena = heapArena;
         this.directArena = directArena;
         if (directArena != null) {
+            // tinyCacheSize 的默认值是 512
             tinySubPageDirectCaches = createSubPageCaches(
                     tinyCacheSize, PoolArena.numTinySubpagePools, SizeClass.Tiny);
+            // smallCacheSize 的默认值是 256
             smallSubPageDirectCaches = createSubPageCaches(
                     smallCacheSize, directArena.numSmallSubpagePools, SizeClass.Small);
 
             numShiftsNormalDirect = log2(directArena.pageSize);
+            // normalCacheSize 的默认值是 64
             normalDirectCaches = createNormalCaches(
                     normalCacheSize, maxCachedBufferCapacity, directArena);
 
@@ -121,6 +126,7 @@ final class PoolThreadCache {
     private static <T> MemoryRegionCache<T>[] createSubPageCaches(
             int cacheSize, int numCaches, SizeClass sizeClass) {
         if (cacheSize > 0 && numCaches > 0) {
+            // numCaches 作为数组长度
             @SuppressWarnings("unchecked")
             MemoryRegionCache<T>[] cache = new MemoryRegionCache[numCaches];
             for (int i = 0; i < cache.length; i++) {
@@ -333,6 +339,7 @@ final class PoolThreadCache {
         if (cache == null || idx > cache.length - 1) {
             return null;
         }
+        // 直接通过数组下标获取
         return cache[idx];
     }
 
@@ -373,7 +380,11 @@ final class PoolThreadCache {
         private int allocations;
 
         MemoryRegionCache(int size, SizeClass sizeClass) {
+            // 发现一个大于等于 2 的幂次方数
+            // 比如传进来 512，那么计算出来的数就是 512
+            // 如果传进来 511，那么计算出来的数就是 512
             this.size = MathUtil.safeFindNextPositivePowerOfTwo(size);
+            // 创建一个固定大小的 Mpsc 队列
             queue = PlatformDependent.newFixedMpscQueue(this.size);
             this.sizeClass = sizeClass;
         }

@@ -37,7 +37,7 @@ abstract class PoolArena<T> implements PoolArenaMetric {
         Small,
         Normal
     }
-
+    /** 相当于 512 除以 16，即 512 / 16 = 32 */
     static final int numTinySubpagePools = 512 >>> 4;
 
     final PooledByteBufAllocator parent;
@@ -143,11 +143,19 @@ abstract class PoolArena<T> implements PoolArenaMetric {
     abstract boolean isDirect();
 
     PooledByteBuf<T> allocate(PoolThreadCache cache, int reqCapacity, int maxCapacity) {
+        // 创建一个 PooledByteBuf
         PooledByteBuf<T> buf = newByteBuf(maxCapacity);
+        // 通过 cache 为 buf 初始化内存地址之类的值
         allocate(cache, buf, reqCapacity);
         return buf;
     }
 
+    /**
+     * 这里由于 tiny 的大小是 <= 512 的，所以下面通过 >>> 4 来 除以 16 便可以计算出数组下标
+     * 数组长度便是 32 位
+     * 当 normCapacity = 16 时，return 1；
+     * 当 normCapacity =
+     */
     static int tinyIdx(int normCapacity) {
         return normCapacity >>> 4;
     }
@@ -334,15 +342,28 @@ abstract class PoolArena<T> implements PoolArenaMetric {
         return table[tableIdx];
     }
 
+    /**
+     * 这里对请求容量规格化的原因是为了后续在释放该 buf 的时候不需要真的释放
+     * 而是直接丢到缓存里面即可
+     *
+     * @param reqCapacity
+     * @return
+     */
     int normalizeCapacity(int reqCapacity) {
         checkPositiveOrZero(reqCapacity, "reqCapacity");
 
         if (reqCapacity >= chunkSize) {
+            // 如果请求的 capacity 比 chunkSize 还要大的话则直接返回
+            // 这里之前是 return reqCapacity; 后来改成了下面这样
             return directMemoryCacheAlignment == 0 ? reqCapacity : alignCapacity(reqCapacity);
         }
 
         if (!isTiny(reqCapacity)) { // >= 512
             // Doubled
+            // 这里的 Doubled 并不是说 reqCapacity 经过下面的代码后会翻倍
+            // 而是寻找 reqCapacity 的下一个 2 的幂次的数
+            // 比如说 reqCapacity = 513，那么计算出来的 normalizedCapacity 为 1024
+            // 比如说 reqCapacity = 1222，那么计算出来的 normalizedCapacity 为 2048
 
             int normalizedCapacity = reqCapacity;
             normalizedCapacity --;
@@ -370,6 +391,14 @@ abstract class PoolArena<T> implements PoolArenaMetric {
             return reqCapacity;
         }
 
+        // 这里的计算是找 16 的倍数
+        // 比如 reqCapacity = 0，那么计算结果便是 16
+        // 比如 reqCapacity = 2，那么计算结果便是 16
+        // 比如 reqCapacity = 15，那么计算结果便是 16
+        // 比如 reqCapacity = 16，那么计算结果便是 32
+        // 比如 reqCapacity = 17，那么计算结果便是 32
+        // 比如 reqCapacity = 32，那么计算结果便是 48
+        // 比如 reqCapacity = 33，那么计算结果便是 48
         return (reqCapacity & ~15) + 16;
     }
 
