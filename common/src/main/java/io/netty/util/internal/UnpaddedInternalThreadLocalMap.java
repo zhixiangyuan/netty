@@ -31,11 +31,12 @@ import java.util.concurrent.atomic.AtomicInteger;
  * unless you know what you are doing.
  */
 class UnpaddedInternalThreadLocalMap {
-
+    /** 对非 FastThreadLocalThread 线程做兼容，从中获取 InternalThreadLocalMap */
     static final ThreadLocal<InternalThreadLocalMap> slowThreadLocalMap = new ThreadLocal<InternalThreadLocalMap>();
+    /** 从此变量中获取线程存储数据的 index */
     static final AtomicInteger nextIndex = new AtomicInteger();
 
-    /** Used by {@link FastThreadLocal} */
+    /** Used by {@link FastThreadLocal} 数据存储的数组 */
     Object[] indexedVariables;
 
     // Core thread-locals

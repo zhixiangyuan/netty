@@ -42,7 +42,7 @@ import java.util.Set;
  * @see ThreadLocal
  */
 public class FastThreadLocal<V> {
-
+    /** 该变量由于是 static 的，所以是被第一个加载的，这说明了它其实是 0 */
     private static final int variablesToRemoveIndex = InternalThreadLocalMap.nextVariableIndex();
 
     /**
@@ -57,17 +57,21 @@ public class FastThreadLocal<V> {
         }
 
         try {
+            // 获取 InternalThreadLocalMap 中的第一个位置的值
             Object v = threadLocalMap.indexedVariable(variablesToRemoveIndex);
             if (v != null && v != InternalThreadLocalMap.UNSET) {
+                // 如果该值不为空则进来
                 @SuppressWarnings("unchecked")
                 Set<FastThreadLocal<?>> variablesToRemove = (Set<FastThreadLocal<?>>) v;
-                FastThreadLocal<?>[] variablesToRemoveArray =
-                        variablesToRemove.toArray(new FastThreadLocal[0]);
+                // 该值默认是一个 Set，里面存放了所有的 FastThreadLocal
+                // 这里是将 Set 转化为数组
+                FastThreadLocal<?>[] variablesToRemoveArray = variablesToRemove.toArray(new FastThreadLocal[0]);
                 for (FastThreadLocal<?> tlv: variablesToRemoveArray) {
                     tlv.remove(threadLocalMap);
                 }
             }
         } finally {
+            // 从当前线程上面删除 InternalThreadLocalMap
             InternalThreadLocalMap.remove();
         }
     }
@@ -96,15 +100,21 @@ public class FastThreadLocal<V> {
 
     @SuppressWarnings("unchecked")
     private static void addToVariablesToRemove(InternalThreadLocalMap threadLocalMap, FastThreadLocal<?> variable) {
+        // variablesToRemoveIndex 始终为 0，获取 threadLocalMap 的第一个位置的值
         Object v = threadLocalMap.indexedVariable(variablesToRemoveIndex);
         Set<FastThreadLocal<?>> variablesToRemove;
         if (v == InternalThreadLocalMap.UNSET || v == null) {
+            // 创建一个基于 IdentityHashMap 的 Set，泛型是 FastThreadLocal
             variablesToRemove = Collections.newSetFromMap(new IdentityHashMap<FastThreadLocal<?>, Boolean>());
+            // 将这个 Set 放到这个 Map 数组的下标 0 处
             threadLocalMap.setIndexedVariable(variablesToRemoveIndex, variablesToRemove);
         } else {
+            // 如果拿到的不是 UNSET ，说明这是第二次操作了，因此可以强转为 Set
             variablesToRemove = (Set<FastThreadLocal<?>>) v;
         }
 
+        // 最后的目的就是将 FastThreadLocal 放置到 Set 中
+        // 这里将 FastThreadLocal 放到 variablesToRemove 中应该是为了删除
         variablesToRemove.add(variable);
     }
 
@@ -119,6 +129,7 @@ public class FastThreadLocal<V> {
 
         @SuppressWarnings("unchecked")
         Set<FastThreadLocal<?>> variablesToRemove = (Set<FastThreadLocal<?>>) v;
+        // 从 Set 中删除该 ThreadLocal
         variablesToRemove.remove(variable);
     }
 
@@ -130,7 +141,11 @@ public class FastThreadLocal<V> {
 
     public FastThreadLocal() {
         // 每一次创建新的 FastThreadLocal 都会调用这个构造函数
-        // 所以这个 index 表示的便是当前是创建的第几个 index
+        // 这个 index 的标识是一个唯一的标识，这意味着这个 index
+        // 可以用来唯一标识这个 FastThreadLocal
+
+        // todo 这里面有个很严重的问题，如果说我申请了很多的 ThreadLocal，那么 index 会变得很大
+        // 而直接存取又是根据 index 来的，那么会直接对数组进行扩容，那么会浪费很大一片空间
         index = InternalThreadLocalMap.nextVariableIndex();
     }
 
@@ -218,6 +233,7 @@ public class FastThreadLocal<V> {
      */
     private void setKnownNotUnset(InternalThreadLocalMap threadLocalMap, V value) {
         if (threadLocalMap.setIndexedVariable(index, value)) {
+            // 当新增对象的时候会进来
             addToVariablesToRemove(threadLocalMap, this);
         }
     }
@@ -254,10 +270,16 @@ public class FastThreadLocal<V> {
             return;
         }
 
+        // 这里删除了两次
+        // 第一次 Map 的实际 index 处 remove 掉
         Object v = threadLocalMap.removeIndexedVariable(index);
+        // 第二次从 Map 的 0 位置里面的 Set remove 掉
         removeFromVariablesToRemove(threadLocalMap, this);
 
         if (v != InternalThreadLocalMap.UNSET) {
+            // 如果删除时的值不为空的话，那么调用 onRemoval
+            // onRemoval 是一个空函数，这个是留给用户自定义
+            // 的一个钩子，在删除数据是调用
             try {
                 onRemoval((V) v);
             } catch (Exception e) {

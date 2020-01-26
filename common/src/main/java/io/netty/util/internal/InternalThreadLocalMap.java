@@ -57,6 +57,7 @@ public final class InternalThreadLocalMap extends UnpaddedInternalThreadLocalMap
         logger.debug("-Dio.netty.threadLocalMap.stringBuilder.maxSize: {}", STRING_BUILDER_MAX_SIZE);
     }
 
+    /** 获取当前线程中的 InternalThreadLocalMap */
     public static InternalThreadLocalMap getIfSet() {
         Thread thread = Thread.currentThread();
         if (thread instanceof FastThreadLocalThread) {
@@ -94,6 +95,7 @@ public final class InternalThreadLocalMap extends UnpaddedInternalThreadLocalMap
 
     public static void remove() {
         Thread thread = Thread.currentThread();
+        // 从当前线程上面删除 ThreadLocal
         if (thread instanceof FastThreadLocalThread) {
             ((FastThreadLocalThread) thread).setThreadLocalMap(null);
         } else {
@@ -295,18 +297,30 @@ public final class InternalThreadLocalMap extends UnpaddedInternalThreadLocalMap
     public boolean setIndexedVariable(int index, Object value) {
         Object[] lookup = indexedVariables;
         if (index < lookup.length) {
+            // 如果 index < lookup.length 则设置相应的值
             Object oldValue = lookup[index];
             lookup[index] = value;
+            // 注意，只有这里可能返回 false，如果返回 false 则说明 oldValue != UNSET
+            // 这说明 oldValue 不是新值
             return oldValue == UNSET;
         } else {
+            // 如果 index >= length.length 则扩展 indexedVariables 的容量
+            // 并将值设置到新数组上面去
             expandIndexedVariableTableAndSet(index, value);
             return true;
         }
     }
 
+    /** 对 indexedVariables 进行扩容 */
     private void expandIndexedVariableTableAndSet(int index, Object value) {
         Object[] oldArray = indexedVariables;
         final int oldCapacity = oldArray.length;
+        // 通过下面的逻辑寻找新的数组的容量
+        // 寻找大于 index 的 2 的幂次的数
+        // 而是寻找 newCapacity 的下一个 2 的幂次的数
+        // 比如说 newCapacity = 513，那么计算出来的 normalizedCapacity 为 1024
+        // 比如说 newCapacity = 1222，那么计算出来的 normalizedCapacity 为 2048
+
         int newCapacity = index;
         newCapacity |= newCapacity >>>  1;
         newCapacity |= newCapacity >>>  2;
@@ -315,17 +329,24 @@ public final class InternalThreadLocalMap extends UnpaddedInternalThreadLocalMap
         newCapacity |= newCapacity >>> 16;
         newCapacity ++;
 
+        // 将老的数组的数据拷贝到新的数据上面
         Object[] newArray = Arrays.copyOf(oldArray, newCapacity);
+        // 将新数组的 null 的部分填充为 UNSET
         Arrays.fill(newArray, oldCapacity, newArray.length, UNSET);
+        // 将新值放入数组
         newArray[index] = value;
+        // 将新数组赋值给 indexedVariables
         indexedVariables = newArray;
     }
 
     public Object removeIndexedVariable(int index) {
         Object[] lookup = indexedVariables;
         if (index < lookup.length) {
+            // 保存该位置的值
             Object v = lookup[index];
+            // 置空该位置的值
             lookup[index] = UNSET;
+            // 返回该位置的值
             return v;
         } else {
             return UNSET;
