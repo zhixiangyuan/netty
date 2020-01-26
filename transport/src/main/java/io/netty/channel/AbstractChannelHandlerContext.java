@@ -902,6 +902,7 @@ abstract class AbstractChannelHandlerContext implements ChannelHandlerContext, R
 
     private AbstractChannelHandlerContext findContextInbound() {
         AbstractChannelHandlerContext ctx = this;
+        // 可以看到这里面通过循环去找到下一个是 inbound 的 ctx
         do {
             ctx = ctx.next;
         } while (!ctx.inbound);
@@ -910,6 +911,7 @@ abstract class AbstractChannelHandlerContext implements ChannelHandlerContext, R
 
     private AbstractChannelHandlerContext findContextOutbound() {
         AbstractChannelHandlerContext ctx = this;
+        // 可以看到这里通过循环找前一个 outbound 的 ctx
         do {
             ctx = ctx.prev;
         } while (!ctx.outbound);

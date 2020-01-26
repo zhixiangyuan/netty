@@ -199,6 +199,7 @@ public class DefaultChannelPipeline implements ChannelPipeline {
     public final ChannelPipeline addLast(EventExecutorGroup group, String name, ChannelHandler handler) {
         final AbstractChannelHandlerContext newCtx;
         synchronized (this) {
+            // 检查 ChannelHandler 是否被重复添加
             checkMultiplicity(handler);
 
             newCtx = newContext(group, filterName(name, handler), handler);
@@ -454,6 +455,7 @@ public class DefaultChannelPipeline implements ChannelPipeline {
     }
 
     private AbstractChannelHandlerContext remove(final AbstractChannelHandlerContext ctx) {
+        // 这里说明 head 和 tail 是不可被删除的
         assert ctx != head && ctx != tail;
 
         synchronized (this) {
@@ -1086,7 +1088,7 @@ public class DefaultChannelPipeline implements ChannelPipeline {
             return ctx;
         }
     }
-
+    /** 这里的名字很有趣，getContextOrDie 就是找到 Context 或者死 */
     private AbstractChannelHandlerContext getContextOrDie(ChannelHandler handler) {
         AbstractChannelHandlerContext ctx = (AbstractChannelHandlerContext) context(handler);
         if (ctx == null) {
@@ -1303,6 +1305,7 @@ public class DefaultChannelPipeline implements ChannelPipeline {
     final class HeadContext extends AbstractChannelHandlerContext
             implements ChannelOutboundHandler, ChannelInboundHandler {
 
+        /** unsafe 封装了对连接处理的方法 */
         private final Unsafe unsafe;
 
         HeadContext(DefaultChannelPipeline pipeline) {

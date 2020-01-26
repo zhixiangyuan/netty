@@ -23,27 +23,37 @@ public interface ChannelInboundHandler extends ChannelHandler {
 
     /**
      * The {@link Channel} of the {@link ChannelHandlerContext} was registered with its {@link EventLoop}
+     *
+     * 当 Channel 注册到 EventLoop 上面时候的回掉
      */
     void channelRegistered(ChannelHandlerContext ctx) throws Exception;
 
     /**
      * The {@link Channel} of the {@link ChannelHandlerContext} was unregistered from its {@link EventLoop}
+     *
+     * 当 Channel 从 EventLoop 上面取消注册时候的回掉
      */
     void channelUnregistered(ChannelHandlerContext ctx) throws Exception;
 
     /**
      * The {@link Channel} of the {@link ChannelHandlerContext} is now active
+     *
+     * 当 Channel 激活时候的回掉
      */
     void channelActive(ChannelHandlerContext ctx) throws Exception;
 
     /**
      * The {@link Channel} of the {@link ChannelHandlerContext} was registered is now inactive and reached its
      * end of lifetime.
+     *
+     * 当 Channel 失效时候的回掉
      */
     void channelInactive(ChannelHandlerContext ctx) throws Exception;
 
     /**
      * Invoked when the current {@link Channel} has read a message from the peer.
+     *
+     * 当 Channel 读取数据时候的回掉
      */
     void channelRead(ChannelHandlerContext ctx, Object msg) throws Exception;
 
@@ -52,6 +62,8 @@ public interface ChannelInboundHandler extends ChannelHandler {
      * {@link #channelRead(ChannelHandlerContext, Object)}.  If {@link ChannelOption#AUTO_READ} is off, no further
      * attempt to read an inbound data from the current {@link Channel} will be made until
      * {@link ChannelHandlerContext#read()} is called.
+     *
+     * 当 Channel 读取数据完成时候的回掉
      */
     void channelReadComplete(ChannelHandlerContext ctx) throws Exception;
 
