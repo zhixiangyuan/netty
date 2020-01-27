@@ -43,11 +43,13 @@ import java.util.concurrent.atomic.AtomicBoolean;
 final class PoolThreadCache {
 
     private static final InternalLogger logger = InternalLoggerFactory.getInstance(PoolThreadCache.class);
-
+    /** 每个线程都保存着自己的 heap arena，分配内存的时候都需要从 arena 中分配 */
     final PoolArena<byte[]> heapArena;
+    /** 每个线程都保存着自己的 direct arena，分配内存的时候都需要从 arena 中分配 */
     final PoolArena<ByteBuffer> directArena;
 
     // Hold the caches for the different size classes, which are tiny, small and normal.
+    // 为每种不同大小的缓存做一个缓存数组
     private final MemoryRegionCache<byte[]>[] tinySubPageHeapCaches;
     private final MemoryRegionCache<byte[]>[] smallSubPageHeapCaches;
     private final MemoryRegionCache<ByteBuffer>[] tinySubPageDirectCaches;
@@ -71,6 +73,7 @@ final class PoolThreadCache {
                     int maxCachedBufferCapacity, int freeSweepAllocationThreshold) {
         checkPositiveOrZero(maxCachedBufferCapacity, "maxCachedBufferCapacity");
         this.freeSweepAllocationThreshold = freeSweepAllocationThreshold;
+        // 保存 arena
         this.heapArena = heapArena;
         this.directArena = directArena;
         if (directArena != null) {
@@ -96,12 +99,16 @@ final class PoolThreadCache {
         }
         if (heapArena != null) {
             // Create the caches for the heap allocations
+            // tinyCacheSize 的默认值是 512
+            // 这里传入的 PoolArena.numTinySubpagePools 便是 tinySubPageHeapCaches 数组的长度
             tinySubPageHeapCaches = createSubPageCaches(
                     tinyCacheSize, PoolArena.numTinySubpagePools, SizeClass.Tiny);
+            // smallCacheSize 的默认值是 256
             smallSubPageHeapCaches = createSubPageCaches(
                     smallCacheSize, heapArena.numSmallSubpagePools, SizeClass.Small);
 
             numShiftsNormalHeap = log2(heapArena.pageSize);
+            // normalCacheSize 的默认值是 64
             normalHeapCaches = createNormalCaches(
                     normalCacheSize, maxCachedBufferCapacity, heapArena);
 
@@ -311,7 +318,9 @@ final class PoolThreadCache {
     }
 
     private MemoryRegionCache<?> cacheForTiny(PoolArena<?> area, int normCapacity) {
+        // 首先通过 normCapacity 简单的计算出数组下标
         int idx = PoolArena.tinyIdx(normCapacity);
+        // 然后根据数组下标去取出相应的 MemoryRegionCache
         if (area.isDirect()) {
             return cache(tinySubPageDirectCaches, idx);
         }
@@ -374,7 +383,14 @@ final class PoolThreadCache {
     }
 
     private abstract static class MemoryRegionCache<T> {
+        /**
+         * 表示缓存里面的内存大小，比如说 size = 1024，那么则说明
+         * queue 中缓存的 Entry 所对应的内存大小就是 1024B
+         *
+         * todo 这里好像不对，初始化 tiny direct 的时候，每次传进来的都是 512
+         */
         private final int size;
+        /** queue 中缓存的 Entry 的内存大小是相同的 */
         private final Queue<Entry<T>> queue;
         private final SizeClass sizeClass;
         private int allocations;
@@ -475,16 +491,21 @@ final class PoolThreadCache {
             chunk.arena.freeChunk(chunk, handle, sizeClass, nioBuffer, finalizer);
         }
 
+        /** 通过 chunk 加上一个 handle 就能确定唯一一块内存的大小以及其位置 */
         static final class Entry<T> {
+            /** 回收处理器，用于回收对象 */
             final Handle<Entry<?>> recyclerHandle;
+            /** nioBuffer 所对应的 chunk */
             PoolChunk<T> chunk;
             ByteBuffer nioBuffer;
+            /** handle 用于指向 chunk 中唯一的一段连续内存 */
             long handle = -1;
 
             Entry(Handle<Entry<?>> recyclerHandle) {
                 this.recyclerHandle = recyclerHandle;
             }
 
+            /** 回收 entry */
             void recycle() {
                 chunk = null;
                 nioBuffer = null;

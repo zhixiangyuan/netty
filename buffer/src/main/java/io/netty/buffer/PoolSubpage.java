@@ -22,6 +22,10 @@ final class PoolSubpage<T> implements PoolSubpageMetric {
     private final int memoryMapIdx;
     private final int runOffset;
     private final int pageSize;
+    /**
+     * 表示子叶里面的内存分配情况，1 表示已经被分配，0 表示未被分配
+     * todo 这里面有个问题，子页是以双向链表的形式进行连接，那么它搞一个 long[] 到底是怎么判断是否被分配的
+     */
     private final long[] bitmap;
 
     /** 子页以双向链表的方式进行连接 */

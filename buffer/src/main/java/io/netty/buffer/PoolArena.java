@@ -28,13 +28,16 @@ import java.util.concurrent.atomic.AtomicInteger;
 
 import static io.netty.util.internal.ObjectUtil.checkPositiveOrZero;
 import static java.lang.Math.max;
-
+/** 分配内存的竞技场 */
 abstract class PoolArena<T> implements PoolArenaMetric {
     static final boolean HAS_UNSAFE = PlatformDependent.hasUnsafe();
 
     enum SizeClass {
+        /** 0～512B，规则有 16B、32B、48B...480B、496B */
         Tiny,
+        /** 512B、1K、2K、4K */
         Small,
+        /** 8K、16K、32K */
         Normal
     }
     /** 相当于 512 除以 16，即 512 / 16 = 32 */
@@ -92,6 +95,9 @@ abstract class PoolArena<T> implements PoolArenaMetric {
         this.chunkSize = chunkSize;
         directMemoryCacheAlignment = cacheAlignment;
         directMemoryCacheAlignmentMask = cacheAlignment - 1;
+        // pageSize 默认是 0x00100000_00000000
+        // pageSize - 1 = 0x00011111_11111111
+        // 取反得 0x11111111_11111111_11100000_00000000
         subpageOverflowMask = ~(pageSize - 1);
         tinySubpagePools = newSubpagePoolArray(numTinySubpagePools);
         for (int i = 0; i < tinySubpagePools.length; i ++) {
@@ -153,8 +159,9 @@ abstract class PoolArena<T> implements PoolArenaMetric {
     /**
      * 这里由于 tiny 的大小是 <= 512 的，所以下面通过 >>> 4 来 除以 16 便可以计算出数组下标
      * 数组长度便是 32 位
-     * 当 normCapacity = 16 时，return 1；
-     * 当 normCapacity =
+     * 当 normCapacity = 16 时，return 1;
+     * 当 normCapacity = 32 时，return 2;
+     * 当 normCapacity = 48 时，return 3;
      */
     static int tinyIdx(int normCapacity) {
         return normCapacity >>> 4;
@@ -171,6 +178,8 @@ abstract class PoolArena<T> implements PoolArenaMetric {
     }
 
     // capacity < pageSize
+    // 就像注释写的，下面起到的效果就是 normCapacity < pageSize
+    // pageSize 默认是 8192
     boolean isTinyOrSmall(int normCapacity) {
         return (normCapacity & subpageOverflowMask) == 0;
     }
@@ -189,11 +198,12 @@ abstract class PoolArena<T> implements PoolArenaMetric {
             if (tiny) { // < 512
                 if (cache.allocateTiny(this, buf, reqCapacity, normCapacity)) {
                     // was able to allocate out of the cache so move on
+                    // 通过缓存去分配
                     return;
                 }
                 tableIdx = tinyIdx(normCapacity);
                 table = tinySubpagePools;
-            } else {
+            } else { // pageSize > normCapacity >= 512
                 if (cache.allocateSmall(this, buf, reqCapacity, normCapacity)) {
                     // was able to allocate out of the cache so move on
                     return;
@@ -229,8 +239,10 @@ abstract class PoolArena<T> implements PoolArenaMetric {
         if (normCapacity <= chunkSize) {
             if (cache.allocateNormal(this, buf, reqCapacity, normCapacity)) {
                 // was able to allocate out of the cache so move on
+                // 通过 cache 去分配 buf，分配成功则返回
                 return;
             }
+            // 当上面通过缓存分配失败之后，就走下面去申请
             synchronized (this) {
                 allocateNormal(buf, reqCapacity, normCapacity);
                 ++allocationsNormal;
@@ -368,6 +380,7 @@ abstract class PoolArena<T> implements PoolArenaMetric {
         }
 
         if (!isTiny(reqCapacity)) { // >= 512
+            // 对于不是 Tiny 规格的内存大小进行下面的步骤对大小进行规格化
             // Doubled
             // 这里的 Doubled 并不是说 reqCapacity 经过下面的代码后会翻倍
             // 而是寻找 reqCapacity 的下一个 2 的幂次的数
@@ -408,6 +421,8 @@ abstract class PoolArena<T> implements PoolArenaMetric {
         // 比如 reqCapacity = 17，那么计算结果便是 32
         // 比如 reqCapacity = 32，那么计算结果便是 48
         // 比如 reqCapacity = 33，那么计算结果便是 48
+
+        // 对于 Tiny 类型的内存大小，将其规格化为 16 的倍数的内存大小
         return (reqCapacity & ~15) + 16;
     }
 
@@ -783,7 +798,9 @@ abstract class PoolArena<T> implements PoolArenaMetric {
                 int pageShifts, int chunkSize) {
             if (directMemoryCacheAlignment == 0) {
                 return new PoolChunk<ByteBuffer>(this,
-                        allocateDirect(chunkSize), pageSize, maxOrder,
+                        // 通过 JDK 的 api 去申请堆外内存
+                        allocateDirect(chunkSize),
+                        pageSize, maxOrder,
                         pageShifts, chunkSize, 0);
             }
             final ByteBuffer memory = allocateDirect(chunkSize

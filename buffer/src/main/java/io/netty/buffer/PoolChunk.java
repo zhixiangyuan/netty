@@ -144,22 +144,28 @@ final class PoolChunk<T> implements PoolChunkMetric {
 
     PoolChunk(PoolArena<T> arena, T memory, int pageSize, int maxOrder, int pageShifts, int chunkSize, int offset) {
         unpooled = false;
+        // 保存 arena
         this.arena = arena;
+        // 保存申请的内存块
         this.memory = memory;
         this.pageSize = pageSize;
         this.pageShifts = pageShifts;
         this.maxOrder = maxOrder;
+        // chunkSize 大小 16M
         this.chunkSize = chunkSize;
         this.offset = offset;
         unusable = (byte) (maxOrder + 1);
         log2ChunkSize = log2(chunkSize);
         subpageOverflowMask = ~(pageSize - 1);
+        // 刚创建的时候能够使用的空间大小就等于 chunkSize
         freeBytes = chunkSize;
 
         assert maxOrder < 30 : "maxOrder should be < 30, but is: " + maxOrder;
         maxSubpageAllocs = 1 << maxOrder;
 
         // Generate the memory map.
+        // 注意，下面的 d <= maxOrder 是 <= 不是 <
+        // 所以完全二叉树的树高需要加一
         memoryMap = new byte[maxSubpageAllocs << 1];
         depthMap = new byte[memoryMap.length];
         int memoryMapIndex = 1;
@@ -299,6 +305,7 @@ final class PoolChunk<T> implements PoolChunkMetric {
             return -1;
         }
         while (val < d || (id & initial) == 0) { // id & initial == 1 << d for all ids at depth d, for < d it is 0
+            // 对 id * 2
             id <<= 1;
             val = value(id);
             if (val > d) {
@@ -321,7 +328,9 @@ final class PoolChunk<T> implements PoolChunkMetric {
      * @return index in memoryMap
      */
     private long allocateRun(int normCapacity) {
+        // 算出来需要分配的内存大小在完全二叉树的第几层
         int d = maxOrder - (log2(normCapacity) - pageShifts);
+        // 在该层上面分配一个节点
         int id = allocateNode(d);
         if (id < 0) {
             return id;
@@ -433,6 +442,7 @@ final class PoolChunk<T> implements PoolChunkMetric {
                 reqCapacity, subpage.elemSize, arena.parent.threadCache());
     }
 
+    /** 获取该 id 在树的哪一层 */
     private byte value(int id) {
         return memoryMap[id];
     }
