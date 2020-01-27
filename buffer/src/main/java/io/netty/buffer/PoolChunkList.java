@@ -83,15 +83,22 @@ final class PoolChunkList<T> implements PoolChunkListMetric {
             return false;
         }
 
-        for (PoolChunk<T> cur = head; cur != null; cur = cur.next) {
+        for (
+                // 从 head 节点开始分配，遍历链表
+                PoolChunk<T> cur = head; cur != null; cur = cur.next) {
             if (cur.allocate(buf, reqCapacity, normCapacity)) {
                 if (cur.usage() >= maxUsage) {
+                    // 如果 cur 的使用率大于最大使用率
+                    // 则从当前链表上移除
                     remove(cur);
+                    // 然后将 cur 加入到下一个 ChunkList
                     nextList.add(cur);
                 }
+                // 分配成功则 return true
                 return true;
             }
         }
+        // 分配失败 return false
         return false;
     }
 

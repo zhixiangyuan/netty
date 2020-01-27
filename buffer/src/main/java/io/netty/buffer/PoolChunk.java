@@ -135,6 +135,7 @@ final class PoolChunk<T> implements PoolChunkMetric {
     private int freeBytes;
 
     PoolChunkList<T> parent;
+    /** 通过 prev 和 next 将所有的 chunk 组成双向链表结构 */
     PoolChunk<T> prev;
     PoolChunk<T> next;
 

@@ -24,10 +24,12 @@ final class PoolSubpage<T> implements PoolSubpageMetric {
     private final int pageSize;
     private final long[] bitmap;
 
+    /** 子页以双向链表的方式进行连接 */
     PoolSubpage<T> prev;
     PoolSubpage<T> next;
 
     boolean doNotDestroy;
+    /** 表示子页的大小，单位是字节，简写为 B，比如说 1024B 就是 1KB */
     int elemSize;
     private int maxNumElems;
     private int bitmapLength;

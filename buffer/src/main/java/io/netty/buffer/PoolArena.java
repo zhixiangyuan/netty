@@ -246,11 +246,20 @@ abstract class PoolArena<T> implements PoolArenaMetric {
         if (q050.allocate(buf, reqCapacity, normCapacity) || q025.allocate(buf, reqCapacity, normCapacity) ||
             q000.allocate(buf, reqCapacity, normCapacity) || qInit.allocate(buf, reqCapacity, normCapacity) ||
             q075.allocate(buf, reqCapacity, normCapacity)) {
+            // 首次分配时由于 qInit、q075、q050、q025、q000 都是空的，所以没法进行分配
+            // 分配失败时不会进入 if
             return;
         }
 
         // Add a new chunk.
+        // 创建一个 chunk 进行内存分配
+        // 这里的几个参数的数值
+        // pageSize = 8192，也就是 8KB
+        // maxOrder = 11
+        // pageShifts = 13，2 的 13 次方也就是 8192
+        // chunkSize = 16777216，也就是 16MB（16777216 / 1024 / 1024 即 16）
         PoolChunk<T> c = newChunk(pageSize, maxOrder, pageShifts, chunkSize);
+        // 通过新创建的 chunk 进行分配
         boolean success = c.allocate(buf, reqCapacity, normCapacity);
         assert success;
         qInit.add(c);
@@ -797,6 +806,7 @@ abstract class PoolArena<T> implements PoolArenaMetric {
         }
 
         private static ByteBuffer allocateDirect(int capacity) {
+            // 通过 JDK 的方法来直接申请 ByteBuffer 即直接内存
             return PlatformDependent.useDirectBufferNoCleaner() ?
                     PlatformDependent.allocateDirectNoCleaner(capacity) : ByteBuffer.allocateDirect(capacity);
         }
