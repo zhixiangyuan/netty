@@ -315,7 +315,7 @@ final class PoolSubpage<T> implements PoolSubpageMetric {
         // 这里面由于 Subpage 最小以 16B 做切分，所以 bitmapIdx 最大是 512
         // 也就是 0x00000000_00000000_00000001_00000000
         // 这里的 0x01000000_00000000_00000000_00000000
-        // 以最高位 01 作为标志位，表示其位 handle，防止和别的东西搞混
+        // 以最高位 01 作为标志位，表示其位 handle，防止和 chunk 的 handle 搞混
         return 0x4000000000000000L | (long) bitmapIdx << 32 | memoryMapIdx;
     }
 

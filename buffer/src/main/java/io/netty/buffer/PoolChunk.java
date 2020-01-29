@@ -113,6 +113,7 @@ final class PoolChunk<T> implements PoolChunkMetric {
     final T memory;
     /** 是否非池化 */
     final boolean unpooled;
+    /** todo 不知道有什么用 */
     final int offset;
     /** 分配信息满二叉树，index 为节点编号 */
     private final byte[] memoryMap;
@@ -140,7 +141,13 @@ final class PoolChunk<T> implements PoolChunkMetric {
     private final int chunkSize;
     /** log2 {@link #chunkSize} 的结果。默认为 log2( 16M ) = 24 */
     private final int log2ChunkSize;
-    /** 可分配 {@link #subpages} 的数量，即数组大小。默认为 1 << maxOrder = 1 << 11 = 2048 */
+    /**
+     * 可分配 {@link #subpages} 的数量，即数组大小。默认为 1 << maxOrder = 1 << 11 = 2048
+     * 这里写的很合理，它其实是最大的可分配的 subpage 数，因为我们知道一个 chunk 是 16M = 2^24，
+     * 而一个 page 是 8K = 2^13，所以 2^24 / 2^13 = 2^11 = 2048
+     *
+     * 表示的其实就是最大有 2048 个 page 可以分配为 subpage
+     */
     private final int maxSubpageAllocs;
     /**
      * Used to mark memory as unusable
@@ -211,7 +218,8 @@ final class PoolChunk<T> implements PoolChunkMetric {
             }
         }
 
-        // 初始化 subpages
+        // 初始化 subpages，这里为了复用，所以初始化的最大的数组
+        // 虽然某些页可能暂时不会作为 subpage，但是将来可能会作为 subpage
         subpages = newSubpageArray(maxSubpageAllocs);
         cachedNioBuffers = new ArrayDeque<ByteBuffer>(8);
     }
@@ -468,13 +476,15 @@ final class PoolChunk<T> implements PoolChunkMetric {
                 return id;
             }
 
+            // 拿到 chunk 中的 subpages 数组
             final PoolSubpage<T>[] subpages = this.subpages;
+            // 获取每页大小
             final int pageSize = this.pageSize;
 
             // 减少剩余可用字节数
             freeBytes -= pageSize;
 
-            // 获得节点对应的 subpages 数组的编号
+            // 获得节点对应的 subpages 数组的编号，这个编号是 page 的编号
             int subpageIdx = subpageIdx(id);
             // 获得节点对应的 subpages 数组的 PoolSubpage 对象
             PoolSubpage<T> subpage = subpages[subpageIdx];
@@ -530,6 +540,7 @@ final class PoolChunk<T> implements PoolChunkMetric {
     void initBuf(PooledByteBuf<T> buf, ByteBuffer nioBuffer, long handle, int reqCapacity) {
         int memoryMapIdx = memoryMapIdx(handle);
         int bitmapIdx = bitmapIdx(handle);
+        // 判断是 page 还是 subpage，subpage 的 bitmapIdx 最高位为 01 不可能为 0
         if (bitmapIdx == 0) {
             byte val = value(memoryMapIdx);
             assert val == unusable : String.valueOf(val);
@@ -550,12 +561,20 @@ final class PoolChunk<T> implements PoolChunkMetric {
 
         int memoryMapIdx = memoryMapIdx(handle);
 
+        // 根据 subpageIdx 取出 subpage 对象
         PoolSubpage<T> subpage = subpages[subpageIdx(memoryMapIdx)];
         assert subpage.doNotDestroy;
         assert reqCapacity <= subpage.elemSize;
 
         buf.init(
             this, nioBuffer, handle,
+                    // page 偏移量 + subpage 偏移量
+                    // bitmapIdx & 0x3FFFFFFF 是因为 bitmapIdx 的高位为 0x01
+                    // 通过 0x3F 即 0x00111111 将最高位两位给过滤掉，这里 0x3FFFFFFF
+                    // 的作用便是作为掩码
+                    // todo 这里的 offset 不管他，我也不知道这里还加个 offset 干嘛
+                    //
+                    // 计算 SubPage 内存块在 memory 中的开始位置
             runOffset(memoryMapIdx) + (bitmapIdx & 0x3FFFFFFF) * subpage.elemSize + offset,
                 reqCapacity, subpage.elemSize, arena.parent.threadCache());
     }
@@ -614,6 +633,12 @@ final class PoolChunk<T> implements PoolChunkMetric {
     /** 计算出子页的 id */
     private int subpageIdx(int memoryMapIdx) {
         // 这里的 memoryMapIdx ^ maxSubpageAllocs 实现的效果其实就是 memoryMapIdx - maxSubpageAllocs
+        // 这里的 memoryMapIdx 是所处 page 完全二叉树数组的 id
+        // maxSubpageAllocs 是最多可分配的 page 数
+        // todo 这两个相减可以得到 page 数组的 id 还是有点费解
+        // 可以这样理解，maxSubpageAllocs 虽然是最多可分配的 page 数，但其实这个数字是等于
+        // 完全二叉树数组的第一个 page 元素的 id 的，所以这样相减可以得到其 page 数组的下标
+        // 比如说 2048 ^ 2048 = 0、2049 ^ 2048 = 1
         return memoryMapIdx ^ maxSubpageAllocs; // remove highest set bit, to get offset
     }
 

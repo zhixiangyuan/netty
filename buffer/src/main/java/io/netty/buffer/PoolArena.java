@@ -59,12 +59,15 @@ abstract class PoolArena<T> implements PoolArenaMetric {
      * 数组的每个元素，都是双向链表
      *
      * tinySubpagePools[0] 表示 16B ，tinySubpagePools[1] 表示 32B
+     * 每个规格以 16B 进行增加
      */
     private final PoolSubpage<T>[] tinySubpagePools;
     /**
      * small 类型的 SubpagePools 数组
      *
      * 数组的每个元素，都是双向链表
+     *
+     * small 中的规格为 512B、1K、2K、4K
      */
     private final PoolSubpage<T>[] smallSubpagePools;
 
@@ -360,22 +363,39 @@ abstract class PoolArena<T> implements PoolArenaMetric {
         }
     }
 
+    /** 从子页池中取出需要的 subpage */
     PoolSubpage<T> findSubpagePoolHead(int elemSize) {
         int tableIdx;
         PoolSubpage<T>[] table;
         if (isTiny(elemSize)) { // < 512
+            // 大小为 tiny 的话则将大小除以 16 即可得到索引
+            // 写成二进制形式就是 >>> 4
+            // 下面便是获取索引
             tableIdx = elemSize >>> 4;
+            // 获取使用的 pool
             table = tinySubpagePools;
         } else {
+            // 如果是 small 的话，small 的规格为 512B、1024B、2048B、4096B
             tableIdx = 0;
+            // 对每个规格除以 2^10 可得
+            // 512B、1024B、2048B、4096B
+            // 2^10                      /
+            // ----------------------------
+            // 0   、1    、2    、4
+            // 0000、0001 、0010 、0100
             elemSize >>>= 10;
+            // 下面如果 elemSize 不为 0 则进入循环
             while (elemSize != 0) {
+                // 对于四种情况分别可以算出结果
+                //            0000、0001 、0010 、0100
+                // tableIdx   0   、1    、2    、3
                 elemSize >>>= 1;
                 tableIdx ++;
             }
+            // 获取使用的 pool
             table = smallSubpagePools;
         }
-
+        // 从池中取出需要的 subpage
         return table[tableIdx];
     }
 
