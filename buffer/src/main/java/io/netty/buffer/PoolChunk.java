@@ -454,10 +454,15 @@ final class PoolChunk<T> implements PoolChunkMetric {
     private long allocateSubpage(int normCapacity) {
         // Obtain the head of the PoolSubPage pool that is owned by the PoolArena and synchronize on it.
         // This is need as we may add it back and so alter the linked-list structure.
+        // 获得对应内存规格的 Subpage 双向链表的 head 节点
         PoolSubpage<T> head = arena.findSubpagePoolHead(normCapacity);
         int d = maxOrder; // subpages are only be allocated from pages i.e., leaves
+        // 加锁，分配过程会修改双向链表的结构，会存在多线程的情况
+        // todo 这里的竞争是什么情况
         synchronized (head) {
+            // 获得最底层的一个节点。Subpage 只能使用二叉树的最底层的节点
             int id = allocateNode(d);
+            // 获取失败，直接返回
             if (id < 0) {
                 return id;
             }
@@ -465,16 +470,23 @@ final class PoolChunk<T> implements PoolChunkMetric {
             final PoolSubpage<T>[] subpages = this.subpages;
             final int pageSize = this.pageSize;
 
+            // 减少剩余可用字节数
             freeBytes -= pageSize;
 
+            // 获得节点对应的 subpages 数组的编号
             int subpageIdx = subpageIdx(id);
+            // 获得节点对应的 subpages 数组的 PoolSubpage 对象
             PoolSubpage<T> subpage = subpages[subpageIdx];
+            // 初始化 PoolSubpage 对象
             if (subpage == null) {
+                // 不存在，则进行创建 PoolSubpage 对象
                 subpage = new PoolSubpage<T>(head, this, id, runOffset(id), pageSize, normCapacity);
                 subpages[subpageIdx] = subpage;
             } else {
+                // 存在，则重新初始化 PoolSubpage 对象
                 subpage.init(head, normCapacity);
             }
+            // 分配 PoolSubpage 内存块
             return subpage.allocate();
         }
     }
@@ -590,7 +602,9 @@ final class PoolChunk<T> implements PoolChunkMetric {
         return shift * runLength(id);
     }
 
+    /** 计算出子页的 id */
     private int subpageIdx(int memoryMapIdx) {
+        // 这里的 memoryMapIdx ^ maxSubpageAllocs 实现的效果其实就是 memoryMapIdx - maxSubpageAllocs
         return memoryMapIdx ^ maxSubpageAllocs; // remove highest set bit, to get offset
     }
 
