@@ -107,22 +107,46 @@ final class PoolChunk<T> implements PoolChunkMetric {
 
     private static final int INTEGER_SIZE_MINUS_ONE = Integer.SIZE - 1;
 
+    /** 所属 Arena 对象 */
     final PoolArena<T> arena;
+    /** 内存空间 */
     final T memory;
+    /** 是否非池化 */
     final boolean unpooled;
     final int offset;
+    /** 分配信息满二叉树，index 为节点编号 */
     private final byte[] memoryMap;
+    /** 高度信息满二叉树，index 为节点编号 */
     private final byte[] depthMap;
+    /** PoolSubpage 数组 */
     private final PoolSubpage<T>[] subpages;
-    /** Used to determine if the requested capacity is equal to or greater than pageSize. */
+    /**
+     * Used to determine if the requested capacity is equal to or greater than pageSize.
+     *
+     * 判断分配请求内存是否为 Tiny/Small ，即分配 Subpage 内存块
+     */
     private final int subpageOverflowMask;
+    /** Page 大小，默认 8KB = 8192B */
     private final int pageSize;
+    /**
+     * 从 1 开始左移到 {@link #pageSize} 的位数。默认 13 ，1 << 13 = 8192
+     *
+     * 具体用途，见 {@link #allocateRun(int)} 方法，计算指定容量所在满二叉树的层级
+     */
     private final int pageShifts;
+    /** 满二叉树的高度。默认为 11，层高从 0 开始 */
     private final int maxOrder;
+    /** Chunk 内存块占用大小。默认为 16M = 16 * 1024 */
     private final int chunkSize;
+    /** log2 {@link #chunkSize} 的结果。默认为 log2( 16M ) = 24 */
     private final int log2ChunkSize;
+    /** 可分配 {@link #subpages} 的数量，即数组大小。默认为 1 << maxOrder = 1 << 11 = 2048 */
     private final int maxSubpageAllocs;
-    /** Used to mark memory as unusable */
+    /**
+     * Used to mark memory as unusable
+     *
+     * 标记节点不可用。默认为 maxOrder + 1 = 12
+     */
     private final byte unusable;
 
     // Use as cache for ByteBuffer created from the memory. These are just duplicates and so are only a container
@@ -132,17 +156,22 @@ final class PoolChunk<T> implements PoolChunkMetric {
     // This may be null if the PoolChunk is unpooled as pooling the ByteBuffer instances does not make any sense here.
     private final Deque<ByteBuffer> cachedNioBuffers;
 
+    /** 剩余可用字节数 */
     private int freeBytes;
 
+    /** 所属 PoolChunkList 对象 */
     PoolChunkList<T> parent;
     /** 通过 prev 和 next 将所有的 chunk 组成双向链表结构 */
+    /** 上一个 Chunk 对象 */
     PoolChunk<T> prev;
+    /** 下一个 Chunk 对象 */
     PoolChunk<T> next;
 
     // TODO: Test if adding padding helps under contention
     //private long pad0, pad1, pad2, pad3, pad4, pad5, pad6, pad7;
 
     PoolChunk(PoolArena<T> arena, T memory, int pageSize, int maxOrder, int pageShifts, int chunkSize, int offset) {
+        // 池化
         unpooled = false;
         // 保存 arena
         this.arena = arena;
@@ -154,6 +183,7 @@ final class PoolChunk<T> implements PoolChunkMetric {
         // chunkSize 大小 16M
         this.chunkSize = chunkSize;
         this.offset = offset;
+        // 默认为层高加一
         unusable = (byte) (maxOrder + 1);
         log2ChunkSize = log2(chunkSize);
         subpageOverflowMask = ~(pageSize - 1);
@@ -163,6 +193,8 @@ final class PoolChunk<T> implements PoolChunkMetric {
         assert maxOrder < 30 : "maxOrder should be < 30, but is: " + maxOrder;
         maxSubpageAllocs = 1 << maxOrder;
 
+
+        // 初始化 memoryMap 和 depthMap
         // Generate the memory map.
         // 注意，下面的 d <= maxOrder 是 <= 不是 <
         // 所以完全二叉树的树高需要加一
@@ -179,12 +211,14 @@ final class PoolChunk<T> implements PoolChunkMetric {
             }
         }
 
+        // 初始化 subpages
         subpages = newSubpageArray(maxSubpageAllocs);
         cachedNioBuffers = new ArrayDeque<ByteBuffer>(8);
     }
 
     /** Creates a special chunk that is not pooled. */
     PoolChunk(PoolArena<T> arena, T memory, int size, int offset) {
+        // 非池化
         unpooled = true;
         this.arena = arena;
         this.memory = memory;
@@ -231,9 +265,12 @@ final class PoolChunk<T> implements PoolChunkMetric {
 
     boolean allocate(PooledByteBuf<T> buf, int reqCapacity, int normCapacity) {
         final long handle;
+        // 大于等于 Page 大小，分配 Page 内存块
         if ((normCapacity & subpageOverflowMask) != 0) { // >= pageSize
             handle =  allocateRun(normCapacity);
-        } else {
+        }
+        // 小于 Page 大小，分配 Subpage 内存块
+        else {
             handle = allocateSubpage(normCapacity);
         }
 
@@ -251,15 +288,26 @@ final class PoolChunk<T> implements PoolChunkMetric {
      * need to update their state
      * The minimal depth at which subtree rooted at id has some free space
      *
+     * 更新获得的节点的祖先都不可用
+     *
      * @param id id
      */
     private void updateParentsAlloc(int id) {
+        // 当节点为根节点的时候结束循环
         while (id > 1) {
+            // id 为当前节点，如果当前节点不为根节点的话则进入循环，即 id > 1，因为 1 是根节点
+            // >>> 为无符号右移
+            // id >>> 1 即对 id 除以 2
             int parentId = id >>> 1;
+            // 取出当前节点的值
             byte val1 = value(id);
+            // 取出当前节点的兄弟节点的值
             byte val2 = value(id ^ 1);
+            // 从两个值中取出较低小的那一个
             byte val = val1 < val2 ? val1 : val2;
+            // 然后将较小的值赋值给父节点
             setValue(parentId, val);
+            // 将父节点置为当前节点
             id = parentId;
         }
     }
@@ -294,47 +342,104 @@ final class PoolChunk<T> implements PoolChunkMetric {
      * Algorithm to allocate an index in memoryMap when we query for a free node
      * at depth d
      *
+     * 在深度 d 上分配一个节点
+     *
      * @param d depth
      * @return index in memoryMap
      */
     private int allocateNode(int d) {
+        // id 表示的是当前选择节点的索引
         int id = 1;
+        // 这里的 initial 其实是一个蒙板，用于实现高效的小于操作
+        // 具体细节在下面的 (id & initial) == 0 分析
         int initial = - (1 << d); // has last d bits = 0 and rest all = 1
+        // 获取根节点可分配的内存，即根节点的深度
+        // value(id) { return memoryMap[id]; }
         byte val = value(id);
+        // 如果根节点的值,如果跟节点大于 d，当前 Chunk 没有符合的节点
+        // 比如说根节点为 2，即 val = 2，那么最大可分配内存为 8M，而如果 d = 1，那么说明想要分配 16M 内存
+        // 那么此 chunk 必然无法满足
         if (val > d) { // unusable
             return -1;
         }
+        // val < d 表示的是当前节点的容量是否大于申请的容量
+        //
+        // 下面是对 (id & initial) == 0 分析，其实很简单，就是一个位运算实现 < 号，提高效率
+        // 这里假设 d = 11，那么 initial 便等于 0b11111111_11111111_11111000_00000000
+        // int initial = - (1 << d) 这个操作便完成了制作一个后 11 位为 0，前面都是 1 的工作
+        // 然后在运算 (id & initial) == 0 的运算起到的效果便是 id < 2048
+        // 这里 initial = -2048，但是运算的效果是 id < 2048
+        // 那么这个表达式的效果就是当选择的节点没到 id > 2048 的时候便一直循环
+        // 而 2048 是 d = 11 的第一个节点
+        // id & initial 来保证，高度小于 d 会继续循环
+        //
+        // 看完上述分析，那么这里走出循环的逻辑便是当 val >= d 也就是当前节点的容量小于等于申请节点的容量（而小于无法分配，
+        // 所以只有等于的情况了），&& id >= 2048，也就是在所申请层的节点，而不是在其父节点
+        //
+        // 看过这里的分析便明白这里进入循环的条件是当 val 即当前节点的容量等于请求的容量
+        // 或者此时还没有循环到该到的深度的时候便进入循环
         while (val < d || (id & initial) == 0) { // id & initial == 1 << d for all ids at depth d, for < d it is 0
-            // 对 id * 2
+            // 对 id * 2，进入下一层
             id <<= 1;
+            // 获取 id 所在节点的深度
             val = value(id);
+            // 如果值大于 d ，说明，以左节点作为根节点形成虚拟的虚拟满二叉树，没有符合的节点
             if (val > d) {
+                // 此处的 id 为偶数则加一，奇数则减一
+                // 也就是说如果是左边节点不满足则换到右边节点
+                // 如果是右边节点不满足，则换到左边节点
+                // 不过这里的 id 一定是偶数，所以只会是从左边节点切换到右边节点的效果
                 id ^= 1;
+                // 然后取出节点中的深度
                 val = value(id);
             }
         }
+        // 校验获得的节点值合理
         byte value = value(id);
         assert value == d && (id & initial) == 1 << d : String.format("val = %d, id & initial = %d, d = %d",
                 value, id & initial, d);
+        // 更新获得的节点不可用，即该节点已分配
         setValue(id, unusable); // mark as unusable
+        // 更新获得的节点的祖先都不可用
         updateParentsAlloc(id);
+        // 返回节点编号
         return id;
     }
 
     /**
      * Allocate a run of pages (>=1)
      *
+     * 分配一个大于等一一个 page 的空间
+     *
      * @param normCapacity normalized capacity
      * @return index in memoryMap
      */
     private long allocateRun(int normCapacity) {
         // 算出来需要分配的内存大小在完全二叉树的第几层
+        // 这里面需要注意的是 normCapacity 是大于等于 page 大小的，这个方法外层有个 if 控制住了
+        // 那么 log2(normCapacity) 计算出来的数值一定是大于等于 pageShifts
+        // 假设这里进来的 normCapacity = 8192 刚好是一个 page 的大小
+        // 那么计算出来的 log2(normCapacity) = 13，pageShifts 也等于 13
+        // 最后 maxOrder - (log2(normCapacity) - pageShifts) = 11，而第 11 层确实是按照 8K 来分配内存的
+
+        // 这里的计算逻辑便是 maxOrder 作为默认的层高，通过 (log2(normCapacity) - pageShifts) 来
+        // 判断是否需要向上层移动，以及需要移动几层
+        // 那么这里移动几层便是通过二进制来判断，normCapacity 必然是 2 的幂次
+        // 这里面的 pageShifts 是 13，表示的是一个 1 << 13 的二进制数即 8192，也即 0x00000000_00000000_00100000_00000000
+        // 而 normCapacity 是一个 2 的幂的数，这个数的二进制只会有一个 1，log2(normCapacity) 也是判断这个 1 后面有几个 0
+        // 因为默认 page 为 8192，pageShifts 也就是 13
+        // 当 normCapacity 后面有 13 个零的时候，那么 normCapacity 便与 page 大小相等，不需要向上层移动
+        // 当 normCapacity 后面有 14 个零的时候，那么 normCapacity 便比 page 大出一个等级，便需要向上移动一个层级
+        // 当 normCapacity 后面有 15 个零的时候，那么 normCapacity 便比 page 大出两个等级，便需要向上移动两个层级
+        // 表现形式就是 maxOrder - (log2(normCapacity) - pageShifts)
         int d = maxOrder - (log2(normCapacity) - pageShifts);
         // 在该层上面分配一个节点
         int id = allocateNode(d);
+        // 未获得到节点，直接返回
         if (id < 0) {
             return id;
         }
+        // 减少剩余可用字节数
         freeBytes -= runLength(id);
         return id;
     }
@@ -442,7 +547,7 @@ final class PoolChunk<T> implements PoolChunkMetric {
                 reqCapacity, subpage.elemSize, arena.parent.threadCache());
     }
 
-    /** 获取该 id 在树的哪一层 */
+    /** 获取该 id 在树的哪一层，如果处于 un */
     private byte value(int id) {
         return memoryMap[id];
     }
@@ -451,20 +556,34 @@ final class PoolChunk<T> implements PoolChunkMetric {
         memoryMap[id] = val;
     }
 
+    /** 根据 id 获取该节点所在树的深度 */
     private byte depth(int id) {
         return depthMap[id];
     }
 
     private static int log2(int val) {
         // compute the (0-based, with lsb = 0) position of highest set bit i.e, log2
+        // 假设进来的 val = 16777216，即 16M，即 0b00000001_00000000_00000000_00000000
+        // Integer.numberOfLeadingZeros(val) = 7，表示高位的 7 个 0
+        // INTEGER_SIZE_MINUS_ONE = 31
+        // INTEGER_SIZE_MINUS_ONE - Integer.numberOfLeadingZeros(val) = 24 表示除了第一个 1 后面的位数
         return INTEGER_SIZE_MINUS_ONE - Integer.numberOfLeadingZeros(val);
+        // 弄明白了它的含义之后还需要知道一点，即 log2(1 << 24) = 24，计算出来的这个数字便是 1 左移多少位能够还原的数字
     }
 
+    /** 计算节点 id 所占用的字节长度*/
     private int runLength(int id) {
         // represents the size in #bytes supported by node 'id' in the tree
-        return 1 << log2ChunkSize - depth(id);
+        // 这里计算节点长度我们来推演一下
+        // 假设现在我们计算 id = 1 的节点，那么计算出来的值应该是 16M 即 2^4 * 2^20
+        // log2ChunkSize = 24，depth(1) = 0，
+        // 那么 1 << (log2ChunkSize - depth(id)) 便为 1 << 24 即  2^4 * 2^20
+        // 如果是第二层节点即  2^3 * 2^20
+        return 1 << (log2ChunkSize - depth(id));
+        // 这里由于 log2(1 << 24) = 24，第 0 层不动，第 1 层除 2 即可，以此类推
     }
 
+    /** 计算字节长度 */
     private int runOffset(int id) {
         // represents the 0-based offset in #bytes from start of the byte-array chunk
         int shift = id ^ 1 << depth(id);
