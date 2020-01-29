@@ -456,6 +456,7 @@ final class PoolChunk<T> implements PoolChunkMetric {
         // This is need as we may add it back and so alter the linked-list structure.
         // 获得对应内存规格的 Subpage 双向链表的 head 节点
         PoolSubpage<T> head = arena.findSubpagePoolHead(normCapacity);
+        // 选中最 page 的最底层，maxOrder 即 11
         int d = maxOrder; // subpages are only be allocated from pages i.e., leaves
         // 加锁，分配过程会修改双向链表的结构，会存在多线程的情况
         // todo 这里的竞争是什么情况
@@ -598,7 +599,15 @@ final class PoolChunk<T> implements PoolChunkMetric {
     /** 计算字节长度 */
     private int runOffset(int id) {
         // represents the 0-based offset in #bytes from start of the byte-array chunk
-        int shift = id ^ 1 << depth(id);
+        // 这里是计算偏移几个点
+        // id ^ (1 << depth(id)) 的结果等价于 id - (1 << depth(id))
+        // 这里假设 id = 2048，那么 depth(id) = 11 便是 11 层，1 << 11 = 2048 便是 11 层第一个节点
+        // 那么 id - 2048 便是 0，即无需移动
+        // 假设 id = 2049 那么便是 id - 2048 = 1，需要移动一格
+        int shift = id ^ (1 << depth(id));
+        // shift * runLength(id) 即计算偏移
+        // 假设第一个节点，那么便是 0 * runLength(id) = 0，即无需移动
+        // 假设第二个节点，那么便是 1 * runLength(id) = runLength(id)，偏移量便是 runLength(id)
         return shift * runLength(id);
     }
 

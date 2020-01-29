@@ -53,7 +53,19 @@ abstract class PoolArena<T> implements PoolArenaMetric {
     final int numSmallSubpagePools;
     final int directMemoryCacheAlignment;
     final int directMemoryCacheAlignmentMask;
+    /**
+     * tiny 类型的 PoolSubpage 数组
+     *
+     * 数组的每个元素，都是双向链表
+     *
+     * tinySubpagePools[0] 表示 16B ，tinySubpagePools[1] 表示 32B
+     */
     private final PoolSubpage<T>[] tinySubpagePools;
+    /**
+     * small 类型的 SubpagePools 数组
+     *
+     * 数组的每个元素，都是双向链表
+     */
     private final PoolSubpage<T>[] smallSubpagePools;
 
     private final PoolChunkList<T> q050;
@@ -134,9 +146,12 @@ abstract class PoolArena<T> implements PoolArenaMetric {
         chunkListMetrics = Collections.unmodifiableList(metrics);
     }
 
+    /** 创建 PoolSubpage 头节点，该链表默认为双向循环链表 */
     private PoolSubpage<T> newSubpagePoolHead(int pageSize) {
         PoolSubpage<T> head = new PoolSubpage<T>(pageSize);
+        // 默认指向自己
         head.prev = head;
+        // 默认指向自己
         head.next = head;
         return head;
     }
@@ -220,6 +235,7 @@ abstract class PoolArena<T> implements PoolArenaMetric {
              */
             synchronized (head) {
                 final PoolSubpage<T> s = head.next;
+                // 默认头节点没有任何内存相关的信息，默认指向自己，即 head.next = head;
                 if (s != head) {
                     assert s.doNotDestroy && s.elemSize == normCapacity;
                     long handle = s.allocate();
