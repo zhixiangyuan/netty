@@ -332,20 +332,33 @@ final class PoolChunk<T> implements PoolChunkMetric {
      * @param id id
      */
     private void updateParentsFree(int id) {
+        // 获得当前节点的子节点的层级
         int logChild = depth(id) + 1;
+        // 当节点为根节点的时候结束循环
         while (id > 1) {
+            // 当前节点除以 2 便是父节点
             int parentId = id >>> 1;
+            // 取出当前节点的值
             byte val1 = value(id);
+            // 取出当前节点的兄弟节点的值
             byte val2 = value(id ^ 1);
+            // 获得当前节点的层级
             logChild -= 1; // in first iteration equals log, subsequently reduce 1 from logChild as we traverse up
 
+            // 两个子节点都可用，则直接设置父节点的层级
+            // 这里 val1、val2 便是当前节点的深度
+            // 如果 val1、val2 和计算出来的实际应该是的深度 logChild 相等的话
+            // 那么便将父节点设置为 logChild - 1 的深度，也就是实际的深度
             if (val1 == logChild && val2 == logChild) {
                 setValue(parentId, (byte) (logChild - 1));
             } else {
+                // 从两个值中取出较低小的那一个
                 byte val = val1 < val2 ? val1 : val2;
+                // 然后将较小的值赋值给父节点
                 setValue(parentId, val);
             }
 
+            // 将父节点置为当前节点
             id = parentId;
         }
     }

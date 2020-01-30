@@ -50,15 +50,28 @@ final class PoolThreadCache {
 
     // Hold the caches for the different size classes, which are tiny, small and normal.
     // 为每种不同大小的缓存做一个缓存数组
+    /** Direct 类型的 tiny Subpage 内存块缓存数组 */
     private final MemoryRegionCache<byte[]>[] tinySubPageHeapCaches;
+    /** Direct 类型的 small Subpage 内存块缓存数组 */
     private final MemoryRegionCache<byte[]>[] smallSubPageHeapCaches;
     private final MemoryRegionCache<ByteBuffer>[] tinySubPageDirectCaches;
     private final MemoryRegionCache<ByteBuffer>[] smallSubPageDirectCaches;
     private final MemoryRegionCache<byte[]>[] normalHeapCaches;
+    /** Direct 类型的 normal 内存块缓存数组 */
     private final MemoryRegionCache<ByteBuffer>[] normalDirectCaches;
 
     // Used for bitshifting when calculate the index of normal caches later
+    /**
+     * 用于计算请求分配的 normal 类型的内存块，在 {@link #normalDirectCaches} 数组中的位置
+     *
+     * 默认为 log2(pageSize) = log2(8192) = 13
+     */
     private final int numShiftsNormalDirect;
+    /**
+     * 用于计算请求分配的 normal 类型的内存块，在 {@link #normalHeapCaches} 数组中的位置
+     *
+     * 默认为 log2(pageSize) = log2(8192) = 13
+     */
     private final int numShiftsNormalHeap;
     private final int freeSweepAllocationThreshold;
     private final AtomicBoolean freed = new AtomicBoolean();
@@ -165,6 +178,9 @@ final class PoolThreadCache {
         }
     }
 
+    // 另一种 log2 的实现方式，同样是计算除了第一位后面的数字的位数
+    // 比如说 0b00000001_00000000
+    // 那么计算的便是从 1 开始不包括 1，后面的 0 的数目
     private static int log2(int val) {
         int res = 0;
         while (val > 1) {
@@ -201,6 +217,7 @@ final class PoolThreadCache {
             // no cache found so just return false here
             return false;
         }
+        // 从线程的缓存中获取
         boolean allocated = cache.allocate(buf, reqCapacity);
         if (++ allocations >= freeSweepAllocationThreshold) {
             allocations = 0;
@@ -216,10 +233,12 @@ final class PoolThreadCache {
     @SuppressWarnings({ "unchecked", "rawtypes" })
     boolean add(PoolArena<?> area, PoolChunk chunk, ByteBuffer nioBuffer,
                 long handle, int normCapacity, SizeClass sizeClass) {
+        // 根据缓存的大小找到相应的 MemoryRegionCache
         MemoryRegionCache<?> cache = cache(area, normCapacity, sizeClass);
         if (cache == null) {
             return false;
         }
+        // 然后将该缓存块加入到缓存当中
         return cache.add(chunk, nioBuffer, handle);
     }
 
@@ -345,6 +364,7 @@ final class PoolThreadCache {
     private MemoryRegionCache<?> cacheForNormal(PoolArena<?> area, int normCapacity) {
         if (area.isDirect()) {
             // 堆外内存则通过下面的方式
+            // 获得数组下标
             int idx = log2(normCapacity >> numShiftsNormalDirect);
             return cache(normalDirectCaches, idx);
         }
@@ -425,9 +445,13 @@ final class PoolThreadCache {
          */
         @SuppressWarnings("unchecked")
         public final boolean add(PoolChunk<T> chunk, ByteBuffer nioBuffer, long handle) {
+            // 封装成 entry
             Entry<T> entry = newEntry(chunk, nioBuffer, handle);
+            // 将 entry 加入到 cache 的 queue 中
             boolean queued = queue.offer(entry);
             if (!queued) {
+                // 加入失败则将 entry 放回到对象池当中
+                // 这里失败可能是由于 queue 满了的原因
                 // If it was not possible to cache the chunk, immediately recycle the entry
                 entry.recycle();
             }
@@ -439,14 +463,17 @@ final class PoolThreadCache {
          * Allocate something out of the cache if possible and remove the entry from the cache.
          */
         public final boolean allocate(PooledByteBuf<T> buf, int reqCapacity) {
+            // 从缓存队列中获取
             Entry<T> entry = queue.poll();
             if (entry == null) {
                 return false;
             }
             initBuf(entry.chunk, entry.nioBuffer, entry.handle, buf, reqCapacity);
+            // 分配完毕之后将 entry 放回对象池
             entry.recycle();
 
             // allocations is not thread-safe which is fine as this is only called from the same thread all time.
+            // 分配次数加一
             ++ allocations;
             return true;
         }

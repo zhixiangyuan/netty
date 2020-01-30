@@ -173,11 +173,15 @@ abstract class PooledByteBuf<T> extends AbstractReferenceCountedByteBuf {
     protected final void deallocate() {
         if (handle >= 0) {
             final long handle = this.handle;
+            // 将 handle 置为 -1
             this.handle = -1;
+            // memory 置为 null
             memory = null;
+            // 释放该内存
             chunk.arena.free(chunk, tmpNioBuf, handle, maxLength, cache);
             tmpNioBuf = null;
             chunk = null;
+            // 将 ByteBuf 放回对象池
             recycle();
         }
     }

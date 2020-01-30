@@ -87,6 +87,7 @@ final class PoolChunkList<T> implements PoolChunkListMetric {
                 // 从 head 节点开始分配，遍历链表
                 PoolChunk<T> cur = head; cur != null; cur = cur.next) {
             if (cur.allocate(buf, reqCapacity, normCapacity)) {
+                // 分配成功则进来
                 if (cur.usage() >= maxUsage) {
                     // 如果 cur 的使用率大于最大使用率
                     // 则从当前链表上移除
@@ -103,6 +104,7 @@ final class PoolChunkList<T> implements PoolChunkListMetric {
     }
 
     boolean free(PoolChunk<T> chunk, long handle, ByteBuffer nioBuffer) {
+        // 释放 chunk 的内存块
         chunk.free(handle, nioBuffer);
         if (chunk.usage() < minUsage) {
             remove(chunk);

@@ -367,12 +367,14 @@ abstract class PoolArena<T> implements PoolArenaMetric {
             // 计算需要释放的缓存大小
             SizeClass sizeClass = sizeClass(normCapacity);
             if (cache != null &&
+                    // 将该内存区段加入到缓存当中，如果加入成功直接返回
                     // 通过 cache.add 尝试释放
                     cache.add(this, chunk, nioBuffer, handle, normCapacity, sizeClass)) {
                 // cached so not free it.
                 return;
             }
 
+            // 如果将内存区段加入到缓存失败，则会释放该块缓存，将该内存区段标记为未使用
             freeChunk(chunk, handle, sizeClass, nioBuffer, false);
         }
     }
@@ -404,6 +406,7 @@ abstract class PoolArena<T> implements PoolArenaMetric {
                         throw new Error();
                 }
             }
+            // 释放 chunk 中的连续空间
             destroyChunk = !chunk.parent.free(chunk, handle, nioBuffer);
         }
         if (destroyChunk) {
