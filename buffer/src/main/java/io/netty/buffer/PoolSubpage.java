@@ -73,6 +73,7 @@ final class PoolSubpage<T> implements PoolSubpageMetric {
 
     /** Special constructor that creates a linked list head */
     PoolSubpage(int pageSize) {
+        // 这个构造仅仅用来创建表头
         chunk = null;
         memoryMapIdx = -1;
         runOffset = -1;

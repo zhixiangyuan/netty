@@ -66,8 +66,11 @@ abstract class PooledByteBuf<T> extends AbstractReferenceCountedByteBuf {
         allocator = chunk.arena.parent;
         this.cache = cache;
 
+        // 使用 offset 来确定从哪里开始使用 memory
         this.offset = offset;
+        // length 是实际申请的内存长度
         this.length = length;
+        // maxLength 是该块内存可以使用的最大的内存
         this.maxLength = maxLength;
     }
 

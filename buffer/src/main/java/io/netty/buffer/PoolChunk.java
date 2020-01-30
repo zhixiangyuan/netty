@@ -221,6 +221,7 @@ final class PoolChunk<T> implements PoolChunkMetric {
         // 初始化 subpages，这里为了复用，所以初始化的最大的数组
         // 虽然某些页可能暂时不会作为 subpage，但是将来可能会作为 subpage
         subpages = newSubpageArray(maxSubpageAllocs);
+        // 初始化一个 cachedNioBuffers
         cachedNioBuffers = new ArrayDeque<ByteBuffer>(8);
     }
 
@@ -276,6 +277,8 @@ final class PoolChunk<T> implements PoolChunkMetric {
         final long handle;
         // 大于等于 Page 大小，分配 Page 内存块
         if ((normCapacity & subpageOverflowMask) != 0) { // >= pageSize
+            // 这里面的分配逻辑主要便是对二叉树进行修改，然后将相关的值的数值改一改
+            // 这里的 handle 便是该节点 id
             handle =  allocateRun(normCapacity);
         }
         // 小于 Page 大小，分配 Subpage 内存块
@@ -351,7 +354,7 @@ final class PoolChunk<T> implements PoolChunkMetric {
      * Algorithm to allocate an index in memoryMap when we query for a free node
      * at depth d
      *
-     * 在深度 d 上分配一个节点
+     * 在深度 d 上分配一个节点，这里的分配逻辑便是在二叉树上面进行修改
      *
      * @param d depth
      * @return index in memoryMap
@@ -441,6 +444,11 @@ final class PoolChunk<T> implements PoolChunkMetric {
         // 当 normCapacity 后面有 14 个零的时候，那么 normCapacity 便比 page 大出一个等级，便需要向上移动一个层级
         // 当 normCapacity 后面有 15 个零的时候，那么 normCapacity 便比 page 大出两个等级，便需要向上移动两个层级
         // 表现形式就是 maxOrder - (log2(normCapacity) - pageShifts)
+        //
+        // 这里当我们需要申请一个大于 pageSize 的空间的时候，那么 normCapacity 必然大于 pageSize
+        // 这里我们计算出 normCapacity 的 shifts，这个 shifts - pageShifts 就得到需要减少的 shifts
+        // 然后将 maxOrder - 这个需要减少的 shifts 就可以得到深度 d
+        // 这里的 maxOrder 本来表示的便是深度
         int d = maxOrder - (log2(normCapacity) - pageShifts);
         // 在该层上面分配一个节点
         int id = allocateNode(d);
@@ -552,15 +560,26 @@ final class PoolChunk<T> implements PoolChunkMetric {
     }
 
     void initBuf(PooledByteBuf<T> buf, ByteBuffer nioBuffer, long handle, int reqCapacity) {
+        // 取出 memoryMapIdx
         int memoryMapIdx = memoryMapIdx(handle);
+        // 取出 bitmapIdx
         int bitmapIdx = bitmapIdx(handle);
         // 判断是 page 还是 subpage，subpage 的 bitmapIdx 最高位为 01 不可能为 0
         if (bitmapIdx == 0) {
+            // 走这边说明不是 subpage
+            // 取出该节点所在的深度 d
             byte val = value(memoryMapIdx);
             assert val == unusable : String.valueOf(val);
-            buf.init(this, nioBuffer, handle, runOffset(memoryMapIdx) + offset,
-                    reqCapacity, runLength(memoryMapIdx), arena.parent.threadCache());
+            buf.init(this, nioBuffer, handle,
+                    // 根据该节点的 id 来计算偏移量
+                    runOffset(memoryMapIdx) + offset,
+                    reqCapacity,
+                    // 计算所用字节长度
+                    runLength(memoryMapIdx),
+                    arena.parent.threadCache()
+            );
         } else {
+            // subpage 走这边
             initBufWithSubpage(buf, nioBuffer, handle, bitmapIdx, reqCapacity);
         }
     }
@@ -593,7 +612,7 @@ final class PoolChunk<T> implements PoolChunkMetric {
                 reqCapacity, subpage.elemSize, arena.parent.threadCache());
     }
 
-    /** 获取该 id 在树的哪一层，如果处于 un */
+    /** 获取该 id 在树的哪一层 */
     private byte value(int id) {
         return memoryMap[id];
     }

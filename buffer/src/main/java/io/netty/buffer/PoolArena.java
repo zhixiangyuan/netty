@@ -28,7 +28,10 @@ import java.util.concurrent.atomic.AtomicInteger;
 
 import static io.netty.util.internal.ObjectUtil.checkPositiveOrZero;
 import static java.lang.Math.max;
-/** 分配内存的竞技场 */
+/**
+ * 分配内存的竞技场，注意这是一个抽象类，实现类在它的内部
+ * 注意：arena 是存在多线程竞争的情况的
+ */
 abstract class PoolArena<T> implements PoolArenaMetric {
     static final boolean HAS_UNSAFE = PlatformDependent.hasUnsafe();
 
@@ -96,6 +99,10 @@ abstract class PoolArena<T> implements PoolArenaMetric {
     private final LongCounter deallocationsHuge = PlatformDependent.newLongCounter();
 
     // Number of thread caches backed by this arena.
+    /**
+     * 当前使用这个 arena 的线程数，每当生成一个 PoolThreadCache 的时候便执行加一，
+     * 当 PoolThreadCache 执行 free 的时候便减一
+     */
     final AtomicInteger numThreadCaches = new AtomicInteger();
 
     // TODO: Test if adding padding helps under contention
@@ -109,19 +116,27 @@ abstract class PoolArena<T> implements PoolArenaMetric {
         this.pageShifts = pageShifts;
         this.chunkSize = chunkSize;
         directMemoryCacheAlignment = cacheAlignment;
+        // 这种 mask 是掩码，用来获取二进制后面的位数
         directMemoryCacheAlignmentMask = cacheAlignment - 1;
         // pageSize 默认是 0x00100000_00000000
         // pageSize - 1 = 0x00011111_11111111
         // 取反得 0x11111111_11111111_11100000_00000000
+        // 这种 OverflowMask 也是掩码，用来获取二进制前面的掩码
         subpageOverflowMask = ~(pageSize - 1);
+        // 在构造函数里面初始化 tinySubpagePools，其实就是 new 一个数组
         tinySubpagePools = newSubpagePoolArray(numTinySubpagePools);
         for (int i = 0; i < tinySubpagePools.length; i ++) {
+            // 初始化双向循环链表的链表头
             tinySubpagePools[i] = newSubpagePoolHead(pageSize);
         }
 
+        // 这里直接减 9 也是醉了，难道是默认 pageShifts 是 13 即 page 是 8K 所以这样减，然后就能得到 4 了么
+        // 这里的 4 刚好是 small subpage pools 的规格
         numSmallSubpagePools = pageShifts - 9;
+        // 在构造函数里面初始化 smallSubpagePools，其实就是 new 一个数组
         smallSubpagePools = newSubpagePoolArray(numSmallSubpagePools);
         for (int i = 0; i < smallSubpagePools.length; i ++) {
+            // 初始化双向循环链表的链表头
             smallSubpagePools[i] = newSubpagePoolHead(pageSize);
         }
 
@@ -166,6 +181,7 @@ abstract class PoolArena<T> implements PoolArenaMetric {
 
     abstract boolean isDirect();
 
+    /** 由于 arena 存在多线程竞争的可能性，所以这里将 cache 传进来 */
     PooledByteBuf<T> allocate(PoolThreadCache cache, int reqCapacity, int maxCapacity) {
         // 创建一个 PooledByteBuf
         PooledByteBuf<T> buf = newByteBuf(maxCapacity);
@@ -221,8 +237,10 @@ abstract class PoolArena<T> implements PoolArenaMetric {
     }
 
     private void allocate(PoolThreadCache cache, PooledByteBuf<T> buf, final int reqCapacity) {
+        // 对请求的 reqCapacity 进行规格化，reqCapacity 是请求的 buf 容量的长度
         final int normCapacity = normalizeCapacity(reqCapacity);
         if (isTinyOrSmall(normCapacity)) { // capacity < pageSize
+            // 请求的容量小于一页的大小则进入 if
             int tableIdx;
             PoolSubpage<T>[] table;
             boolean tiny = isTiny(normCapacity);
@@ -232,17 +250,22 @@ abstract class PoolArena<T> implements PoolArenaMetric {
                     // 通过缓存去分配
                     return;
                 }
+                // 通过规格化的容量可以计算出 tinySubpagePools 中的 index
                 tableIdx = tinyIdx(normCapacity);
+                // 获取 tiny subpage 的池子
                 table = tinySubpagePools;
             } else { // pageSize > normCapacity >= 512
                 if (cache.allocateSmall(this, buf, reqCapacity, normCapacity)) {
                     // was able to allocate out of the cache so move on
                     return;
                 }
+                // 通过规格化的容量可以计算出 smallSubpagePools 中的 index
                 tableIdx = smallIdx(normCapacity);
+                // 获取 small subpage 的池子
                 table = smallSubpagePools;
             }
 
+            // 需要注意的是数组中存放的第一个元素是 head
             final PoolSubpage<T> head = table[tableIdx];
 
             /**
@@ -251,13 +274,17 @@ abstract class PoolArena<T> implements PoolArenaMetric {
              */
             synchronized (head) {
                 final PoolSubpage<T> s = head.next;
-                // 默认头节点没有任何内存相关的信息，默认指向自己，即 head.next = head;
                 if (s != head) {
+                    // s != head，等同于 head.next != next，说明存在除了头节点之外的别的节点
                     assert s.doNotDestroy && s.elemSize == normCapacity;
+                    // 分配 Subpage 内存块
                     long handle = s.allocate();
                     assert handle >= 0;
+                    // 初始化 Subpage 内存块到 PooledByteBuf 对象中
                     s.chunk.initBufWithSubpage(buf, null, handle, reqCapacity);
+                    // 增加 allocationsTiny 或 allocationsSmall 计数
                     incTinySmallAllocation(tiny);
+                    // 返回，因为已经分配成功
                     return;
                 }
             }
@@ -276,10 +303,13 @@ abstract class PoolArena<T> implements PoolArenaMetric {
             }
             // 当上面通过缓存分配失败之后，就走下面去申请
             synchronized (this) {
+                // 申请 Normal Page 内存块
                 allocateNormal(buf, reqCapacity, normCapacity);
+                // 增加 allocationsNormal
                 ++allocationsNormal;
             }
         } else {
+            // 申请 Huge Page 内存块
             // Huge allocations are never served via the cache so just call allocateHuge
             allocateHuge(buf, reqCapacity);
         }
