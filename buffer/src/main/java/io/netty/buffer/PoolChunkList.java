@@ -141,9 +141,11 @@ final class PoolChunkList<T> implements PoolChunkListMetric {
 
     void add(PoolChunk<T> chunk) {
         if (chunk.usage() >= maxUsage) {
+            // 比当前 PoolChunkList 的最大使用率还大就添加到下一个 list
             nextList.add(chunk);
             return;
         }
+        // 比当前使用率小就加到当前队列
         add0(chunk);
     }
 
@@ -153,10 +155,13 @@ final class PoolChunkList<T> implements PoolChunkListMetric {
     void add0(PoolChunk<T> chunk) {
         chunk.parent = this;
         if (head == null) {
+            // 如果没有 head 说明是第一个节点，则将该 chunk 作为 head
             head = chunk;
             chunk.prev = null;
             chunk.next = null;
         } else {
+            // 如果不是第一个节点则将该节点作为第一个节点加入链表
+            // 注意：这里没有构造双向链表
             chunk.prev = null;
             chunk.next = head;
             head.prev = chunk;

@@ -222,6 +222,7 @@ final class PoolThreadCache {
     }
 
     private MemoryRegionCache<?> cache(PoolArena<?> area, int normCapacity, SizeClass sizeClass) {
+        // 根据 sizeClass 的类型找到相应的缓存块
         switch (sizeClass) {
         case Normal:
             return cacheForNormal(area, normCapacity);
@@ -322,24 +323,30 @@ final class PoolThreadCache {
         int idx = PoolArena.tinyIdx(normCapacity);
         // 然后根据数组下标去取出相应的 MemoryRegionCache
         if (area.isDirect()) {
+            // 堆外内存走这边
             return cache(tinySubPageDirectCaches, idx);
         }
+        // 堆内内存走这边
         return cache(tinySubPageHeapCaches, idx);
     }
 
     private MemoryRegionCache<?> cacheForSmall(PoolArena<?> area, int normCapacity) {
         int idx = PoolArena.smallIdx(normCapacity);
         if (area.isDirect()) {
+            // 堆外内存走这边
             return cache(smallSubPageDirectCaches, idx);
         }
+        // 堆内内存走这边
         return cache(smallSubPageHeapCaches, idx);
     }
 
     private MemoryRegionCache<?> cacheForNormal(PoolArena<?> area, int normCapacity) {
         if (area.isDirect()) {
+            // 堆外内存则通过下面的方式
             int idx = log2(normCapacity >> numShiftsNormalDirect);
             return cache(normalDirectCaches, idx);
         }
+        // 堆内的内存则通过下面的方式
         int idx = log2(normCapacity >> numShiftsNormalHeap);
         return cache(normalHeapCaches, idx);
     }

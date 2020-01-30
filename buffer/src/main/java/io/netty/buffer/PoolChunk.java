@@ -252,6 +252,7 @@ final class PoolChunk<T> implements PoolChunkMetric {
 
     @Override
     public int usage() {
+        // 根据空余空间来计算使用率
         final int freeBytes;
         synchronized (arena) {
             freeBytes = this.freeBytes;
@@ -511,24 +512,37 @@ final class PoolChunk<T> implements PoolChunkMetric {
      * @param handle handle to free
      */
     void free(long handle, ByteBuffer nioBuffer) {
+        // 取出 memoryMapIdx
         int memoryMapIdx = memoryMapIdx(handle);
+        // 取出 bitmapIdx
         int bitmapIdx = bitmapIdx(handle);
 
         if (bitmapIdx != 0) { // free a subpage
+            // 如果 bitmapIdx != 0 则说明需要释放的是 subpage
+            // 通过索引找到该 subpage
             PoolSubpage<T> subpage = subpages[subpageIdx(memoryMapIdx)];
             assert subpage != null && subpage.doNotDestroy;
 
             // Obtain the head of the PoolSubPage pool that is owned by the PoolArena and synchronize on it.
             // This is need as we may add it back and so alter the linked-list structure.
+            // 获得对应内存规格的 Subpage 双向链表的 head 节点
             PoolSubpage<T> head = arena.findSubpagePoolHead(subpage.elemSize);
+            // 加锁，分配过程会修改双向链表的结构，会存在多线程的情况
             synchronized (head) {
+                // 释放 Subpage
                 if (subpage.free(head, bitmapIdx & 0x3FFFFFFF)) {
                     return;
                 }
+                // 返回 false ，说明 Page 中无切分正在使用的 Subpage 内存块，所以可以继续向下执行，释放 Page
             }
         }
+        // 释放 Page begin
+
+        // 增加剩余可用字节数
         freeBytes += runLength(memoryMapIdx);
+        // 设置 Page 对应的节点可用
         setValue(memoryMapIdx, depth(memoryMapIdx));
+        // 更新 Page 对应的节点的祖先可用
         updateParentsFree(memoryMapIdx);
 
         if (nioBuffer != null && cachedNioBuffers != null &&

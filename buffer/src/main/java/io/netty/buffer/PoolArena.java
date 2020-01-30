@@ -185,13 +185,26 @@ abstract class PoolArena<T> implements PoolArenaMetric {
         return normCapacity >>> 4;
     }
 
+    /** 计算 small 数组的索引 */
     static int smallIdx(int normCapacity) {
+        // 如果是 small 的话，small 的规格为 512B、1024B、2048B、4096B
         int tableIdx = 0;
+        // 对每个规格除以 2^10 可得
+        // 512B、1024B、2048B、4096B
+        // 2^10                      /
+        // ----------------------------
+        // 0   、1    、2    、4
+        // 0000、0001 、0010 、0100
         int i = normCapacity >>> 10;
+        // 下面如果 elemSize 不为 0 则进入循环
         while (i != 0) {
+            // 对于四种情况分别可以算出结果
+            //            0000、0001 、0010 、0100
+            // tableIdx   0   、1    、2    、3
             i >>>= 1;
             tableIdx ++;
         }
+        // 返回索引
         return tableIdx;
     }
 
@@ -313,13 +326,19 @@ abstract class PoolArena<T> implements PoolArenaMetric {
 
     void free(PoolChunk<T> chunk, ByteBuffer nioBuffer, long handle, int normCapacity, PoolThreadCache cache) {
         if (chunk.unpooled) {
+            // chunk 是非池化的
             int size = chunk.chunkSize();
             destroyChunk(chunk);
             activeBytesHuge.add(-size);
             deallocationsHuge.increment();
-        } else {
+        }
+        // chunk 是池化的
+        else {
+            // 计算需要释放的缓存大小
             SizeClass sizeClass = sizeClass(normCapacity);
-            if (cache != null && cache.add(this, chunk, nioBuffer, handle, normCapacity, sizeClass)) {
+            if (cache != null &&
+                    // 通过 cache.add 尝试释放
+                    cache.add(this, chunk, nioBuffer, handle, normCapacity, sizeClass)) {
                 // cached so not free it.
                 return;
             }
