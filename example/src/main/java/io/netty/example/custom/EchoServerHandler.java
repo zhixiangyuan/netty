@@ -13,7 +13,7 @@
  * License for the specific language governing permissions and limitations
  * under the License.
  */
-package io.netty.example.echo;
+package io.netty.example.custom;
 
 import io.netty.buffer.ByteBuf;
 import io.netty.channel.ChannelHandler.Sharable;
@@ -30,7 +30,15 @@ public class EchoServerHandler extends ChannelInboundHandlerAdapter {
 
     @Override
     public void channelRead(ChannelHandlerContext ctx, Object msg) {
-        ctx.write(msg);
+        if (msg instanceof ByteBuf) {
+            byte[] bytes = System.lineSeparator().getBytes();
+            ByteBuf buffer = ctx.alloc()
+                    .buffer(((ByteBuf) msg).readableBytes() + bytes.length)
+                    .writeBytes(bytes);
+            System.out.println(((ByteBuf) msg).readCharSequence(((ByteBuf) msg).readableBytes(), Charset.defaultCharset()));
+            ctx.write(buffer);
+        }
+
     }
 
     @Override

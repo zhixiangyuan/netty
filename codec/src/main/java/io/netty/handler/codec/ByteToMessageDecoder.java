@@ -420,6 +420,7 @@ public abstract class ByteToMessageDecoder extends ChannelInboundHandlerAdapter 
     protected void callDecode(ChannelHandlerContext ctx, ByteBuf in, List<Object> out) {
         try {
             while (in.isReadable()) {
+                // 记录一下需要向下传递的 list 的大小
                 int outSize = out.size();
 
                 if (outSize > 0) {
@@ -437,6 +438,7 @@ public abstract class ByteToMessageDecoder extends ChannelInboundHandlerAdapter 
                     outSize = 0;
                 }
 
+                // 先记录一下老的 inputLength
                 int oldInputLength = in.readableBytes();
                 decodeRemovalReentryProtection(ctx, in, out);
 
@@ -448,8 +450,11 @@ public abstract class ByteToMessageDecoder extends ChannelInboundHandlerAdapter 
                     break;
                 }
 
+                // 如果需要向下传递的 outSize 的大小没有变化
                 if (outSize == out.size()) {
+                    // 如果 inputLength 没有发生变化
                     if (oldInputLength == in.readableBytes()) {
+                        // 那么直接 break，这个时候说明需要被读取的数据的长度还不够
                         break;
                     } else {
                         continue;

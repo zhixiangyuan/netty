@@ -70,9 +70,12 @@ public class FixedLengthFrameDecoder extends ByteToMessageDecoder {
      */
     protected Object decode(
             @SuppressWarnings("UnusedParameters") ChannelHandlerContext ctx, ByteBuf in) throws Exception {
+        // 当前缓存里面的数据是否是小于 frameLength，小于则不做解析，大于则做切片
         if (in.readableBytes() < frameLength) {
             return null;
         } else {
+            // retained 保留
+            // slice 切片
             return in.readRetainedSlice(frameLength);
         }
     }
