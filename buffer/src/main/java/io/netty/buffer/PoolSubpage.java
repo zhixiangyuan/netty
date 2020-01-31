@@ -19,7 +19,10 @@ package io.netty.buffer;
 /**
  * 同一个 PoolSubpage 内部的 Subpage 占用的内存大小是相同的
  *
- * todo 这里面存的东西如此之多，难道每一个子页都要存么，那么更新的时候所有的子页都要更新
+ * 这里有一个东西好像理解错了，那就是其实每一个 page 只会对应一个 Subpage
+ * 这个 subpage 中存放了所有需要的信息，而组成的双向链表的结构是 head -> subpage，并且只有一个 subpage
+ *
+ *
  */
 final class PoolSubpage<T> implements PoolSubpageMetric {
 
@@ -48,6 +51,9 @@ final class PoolSubpage<T> implements PoolSubpageMetric {
      *
      * todo 这里面有个问题，子页是以双向链表的形式进行连接，那么它搞一个 long[] 到底是怎么判断是否被分配的
      * 对于上述的这个问题，其实它本身是基于 page 做的分配，那么分配完之后，逻辑上面以 bitmap 做记录
+     * 这里面只有一个 subpage，所以不存在更新别的 subpage 的问题
+     *
+     * small 和 tiny 都用到了这个 bitmap
      */
     private final long[] bitmap;
 
@@ -63,7 +69,7 @@ final class PoolSubpage<T> implements PoolSubpageMetric {
     private int maxNumElems;
     /** {@link #bitmap} 长度，这是因为其逻辑上面的长度和实际的长度可能不同 */
     private int bitmapLength;
-    /** 下一个可分配 Subpage 的数组位置，todo 这里标记下一个可分配的数组位置，那难道每一个 Subpage 里面都要维护一个 */
+    /** 下一个可分配 Subpage 的数组位置 */
     private int nextAvail;
     /** 剩余可用 Subpage 的数量 */
     private int numAvail;

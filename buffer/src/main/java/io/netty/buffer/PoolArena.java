@@ -63,6 +63,8 @@ abstract class PoolArena<T> implements PoolArenaMetric {
      *
      * tinySubpagePools[0] 表示 16B ，tinySubpagePools[1] 表示 32B
      * 每个规格以 16B 进行增加
+     *
+     * 这里面初始化的时候只放入了 head，在初始化 subpage 后便加入到 head 后面
      */
     private final PoolSubpage<T>[] tinySubpagePools;
     /**
@@ -71,6 +73,8 @@ abstract class PoolArena<T> implements PoolArenaMetric {
      * 数组的每个元素，都是双向链表
      *
      * small 中的规格为 512B、1K、2K、4K
+     *
+     * 这里面初始化的时候只放入了 head，在初始化 subpage 后便加入到 head 后面
      */
     private final PoolSubpage<T>[] smallSubpagePools;
 
