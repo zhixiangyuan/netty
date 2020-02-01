@@ -31,6 +31,8 @@ import java.util.concurrent.TimeUnit;
 
 /**
  * Compresses a {@link ByteBuf} using the deflate algorithm.
+ *
+ * 对 ByteBuf 对消息进行压缩
  */
 public class JZlibEncoder extends ZlibEncoder {
 

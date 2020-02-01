@@ -32,7 +32,10 @@ import static io.netty.handler.codec.compression.Bzip2Constants.*;
 /**
  * Compresses a {@link ByteBuf} using the Bzip2 algorithm.
  *
+ * 使用 Bzip2 算法对 ByteBuf 消息进行压缩
+ *
  * See <a href="http://en.wikipedia.org/wiki/Bzip2">Bzip2</a>.
+ *
  */
 public class Bzip2Encoder extends MessageToByteEncoder<ByteBuf> {
     /**

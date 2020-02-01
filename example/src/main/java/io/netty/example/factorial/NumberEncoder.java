@@ -25,12 +25,17 @@ import java.math.BigInteger;
  * Encodes a {@link Number} into the binary representation prepended with
  * a magic number ('F' or 0x46) and a 32-bit length prefix.  For example, 42
  * will be encoded to { 'F', 0, 0, 0, 1, 42 }.
+ *
+ * 对数字进行序列化，类似于 JSON、XML 序列化，只不过这里的序列化规则是 Netty 自己定义的
+ *
+ * 实际一般不采用 NumberEncoder 的方式，因为 POJO 类型不好支持
  */
 public class NumberEncoder extends MessageToByteEncoder<Number> {
 
     @Override
     protected void encode(ChannelHandlerContext ctx, Number msg, ByteBuf out) {
         // Convert to a BigInteger first for easier implementation.
+        // 转化成 BigInteger 对象
         BigInteger v;
         if (msg instanceof BigInteger) {
             v = (BigInteger) msg;
@@ -39,6 +44,7 @@ public class NumberEncoder extends MessageToByteEncoder<Number> {
         }
 
         // Convert the number into a byte array.
+        // 转换为字节数组
         byte[] data = v.toByteArray();
         int dataLength = data.length;
 
