@@ -33,7 +33,9 @@ import java.util.List;
  */
 public abstract class ByteToMessageCodec<I> extends ChannelDuplexHandler {
 
+    /** 类型匹配器 */
     private final TypeParameterMatcher outboundMsgMatcher;
+    /** Encoder 对象，todo 这里放一个 encoder 干什么 */
     private final MessageToByteEncoder<I> encoder;
 
     private final ByteToMessageDecoder decoder = new ByteToMessageDecoder() {

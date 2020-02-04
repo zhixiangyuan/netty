@@ -227,7 +227,9 @@ public abstract class AbstractNioByteChannel extends AbstractNioChannel {
                 }
                 return 1;
             }
-        } else if (msg instanceof FileRegion) {
+        }
+        // 从磁盘缓冲区写入
+        else if (msg instanceof FileRegion) {
             FileRegion region = (FileRegion) msg;
             if (region.transferred() >= region.count()) {
                 in.remove();
@@ -253,6 +255,7 @@ public abstract class AbstractNioByteChannel extends AbstractNioChannel {
     protected void doWrite(ChannelOutboundBuffer in) throws Exception {
         int writeSpinCount = config().getWriteSpinCount();
         do {
+            // 获取 flushedEntry 指向的 Entry 的 msg
             Object msg = in.current();
             if (msg == null) {
                 // Wrote all messages.
@@ -271,9 +274,11 @@ public abstract class AbstractNioByteChannel extends AbstractNioChannel {
         if (msg instanceof ByteBuf) {
             ByteBuf buf = (ByteBuf) msg;
             if (buf.isDirect()) {
+                // 如果是堆外内存则直接返回
                 return msg;
             }
 
+            // 将传入的 ByteBuf 转化为堆外内存
             return newDirectBuffer(buf);
         }
 

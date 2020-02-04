@@ -112,13 +112,16 @@ public final class ChannelOutboundBuffer {
     public void addMessage(Object msg, int size, ChannelPromise promise) {
         Entry entry = Entry.newInstance(msg, size, total(msg), promise);
         if (tailEntry == null) {
+            // 第一次调用进入这里
             flushedEntry = null;
         } else {
+            // 第二次调用开始进入这里
             Entry tail = tailEntry;
             tail.next = entry;
         }
         tailEntry = entry;
         if (unflushedEntry == null) {
+            // 第一次调用进入这里
             unflushedEntry = entry;
         }
 
@@ -136,19 +139,24 @@ public final class ChannelOutboundBuffer {
         // where added in the meantime.
         //
         // See https://github.com/netty/netty/issues/2577
+        // 获取 unflushedEntry 所指向的 entry
         Entry entry = unflushedEntry;
         if (entry != null) {
+            // 如果 entry != null 则说明目前有对象可以 flush 出去
             if (flushedEntry == null) {
                 // there is no flushedEntry yet, so start with the entry
+                // 将 flushedEntry 指向 unflushedEntry 指向的 entry
                 flushedEntry = entry;
             }
             do {
+                // 记录有多少个可以被写的 entry
                 flushed ++;
                 if (!entry.promise.setUncancellable()) {
                     // Was cancelled so make sure we free up memory and notify about the freed bytes
                     int pending = entry.cancel();
                     decrementPendingOutboundBytes(pending, false, true);
                 }
+                // 指向下一个 entry
                 entry = entry.next;
             } while (entry != null);
 
@@ -170,7 +178,9 @@ public final class ChannelOutboundBuffer {
             return;
         }
 
+        // 统计目前可以写的字节数
         long newWriteBufferSize = TOTAL_PENDING_SIZE_UPDATER.addAndGet(this, size);
+        // 如果目前可以写的字节数大于高水位置
         if (newWriteBufferSize > channel.config().getWriteBufferHighWaterMark()) {
             setUnwritable(invokeLater);
         }
@@ -189,8 +199,10 @@ public final class ChannelOutboundBuffer {
             return;
         }
 
+        // 减去目前缓冲区中可以写的数据数
         long newWriteBufferSize = TOTAL_PENDING_SIZE_UPDATER.addAndGet(this, -size);
         if (notifyWritability && newWriteBufferSize < channel.config().getWriteBufferLowWaterMark()) {
+            // 当缓冲区中数据数低于低水位时，将标志位设置为可写
             setWritable(invokeLater);
         }
     }
@@ -250,6 +262,7 @@ public final class ChannelOutboundBuffer {
         ChannelPromise promise = e.promise;
         int size = e.pendingSize;
 
+        // 移除节点
         removeEntry(e);
 
         if (!e.cancelled) {
@@ -303,13 +316,16 @@ public final class ChannelOutboundBuffer {
 
     private void removeEntry(Entry e) {
         if (-- flushed == 0) {
+            // 如果 flushed - 1 后等于 0，则说明已经没有任何数据了
             // processed everything
             flushedEntry = null;
             if (e == tailEntry) {
+                // todo 这里 e 应该始终等于 tailEntry 才对，这里还判断一下不是很懂
                 tailEntry = null;
                 unflushedEntry = null;
             }
         } else {
+            // 如果 flushed - 1 后不等于 0，则说明还有节点没有写出去
             flushedEntry = e.next;
         }
     }
@@ -586,10 +602,12 @@ public final class ChannelOutboundBuffer {
 
     private void setUnwritable(boolean invokeLater) {
         for (;;) {
+            // 自旋锁
             final int oldValue = unwritable;
             final int newValue = oldValue | 1;
             if (UNWRITABLE_UPDATER.compareAndSet(this, oldValue, newValue)) {
                 if (oldValue == 0 && newValue != 0) {
+                    // 传播不可写状态
                     fireChannelWritabilityChanged(invokeLater);
                 }
                 break;

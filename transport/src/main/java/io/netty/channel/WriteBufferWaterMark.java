@@ -32,7 +32,9 @@ import static io.netty.util.internal.ObjectUtil.checkPositiveOrZero;
  */
 public final class WriteBufferWaterMark {
 
+    // 默认低水位为 32K
     private static final int DEFAULT_LOW_WATER_MARK = 32 * 1024;
+    // 默认高水位为 64K
     private static final int DEFAULT_HIGH_WATER_MARK = 64 * 1024;
 
     public static final WriteBufferWaterMark DEFAULT =

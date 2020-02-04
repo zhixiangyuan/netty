@@ -879,6 +879,7 @@ public abstract class AbstractChannel extends DefaultAttributeMap implements Cha
         public final void write(Object msg, ChannelPromise promise) {
             assertEventLoop();
 
+            // 负责缓冲写进来的 bytebuf
             ChannelOutboundBuffer outboundBuffer = this.outboundBuffer;
             if (outboundBuffer == null) {
                 // If the outboundBuffer is null we know the channel was closed and so
@@ -893,6 +894,10 @@ public abstract class AbstractChannel extends DefaultAttributeMap implements Cha
 
             int size;
             try {
+                // 这里应该是在出站时对 msg 进行包装
+                // 对于 NioChannel 而言，这里的处理逻辑是将
+                // msg 即 ByteBuf 转化为堆外内存，如果本来就是
+                // 堆外内存则直接返回
                 msg = filterOutboundMessage(msg);
                 size = pipeline.estimatorHandle().size(msg);
                 if (size < 0) {

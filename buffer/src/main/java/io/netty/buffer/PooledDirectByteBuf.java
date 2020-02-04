@@ -213,13 +213,18 @@ final class PooledDirectByteBuf extends PooledByteBuf<ByteBuffer> {
         }
 
         ByteBuffer tmpBuf;
+        // 获得临时 ByteBuf 对象
         if (internal) {
+            // 由于是直接内存，所以直接将内部的 NioBuffer 取出来
             tmpBuf = internalNioBuffer();
         } else {
             tmpBuf = memory.duplicate();
         }
+        // 内部计算 NioBuffer 的 index，为 offset + index
         index = idx(index);
+        // 重新设置 NioBuffer 的 起始 index 和结束 index，结束 index 即 limit
         tmpBuf.clear().position(index).limit(index + length);
+        // 将数据写入到 jdk 的 ByteBuf
         return out.write(tmpBuf);
     }
 
@@ -243,6 +248,7 @@ final class PooledDirectByteBuf extends PooledByteBuf<ByteBuffer> {
     @Override
     public int readBytes(GatheringByteChannel out, int length) throws IOException {
         checkReadableBytes(length);
+        // 从 readerIndex 开始向后 length 长度的字节数
         int readBytes = getBytes(readerIndex, out, length, true);
         readerIndex += readBytes;
         return readBytes;
